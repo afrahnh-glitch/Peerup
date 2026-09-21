@@ -1,0 +1,73 @@
+:root{
+  --shell-w: 440px;
+  --ink: #2B2438;
+  --ink-soft: #736C82;
+  --ink-faint: #A79FB3;
+  --bg-page: #ECE8F1;
+  --bg: #FBF9F4;
+  --surface: #FFFFFF;
+  --border: #EEE7E0;
+  --primary: #5A4B9E;
+  --primary-soft: #EEEAFA;
+  --skyblue: #4E7FA8;
+  --skyblue-soft: #E5F0F7;
+  --coral: #F0684B;
+  --coral-soft: #FDE9E3;
+  --danger: #C6553D;
+  --danger-soft: #FBEAE4;
+  --radius-md: 16px;
+  --shadow-soft: 0 10px 28px -14px rgba(43,36,56,.28);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg-page); color:var(--ink); min-height:100vh;
+  font-family:'Tajawal',-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;
+}
+h1,h2,h3{font-family:'El Messiri','Tajawal',sans-serif;}
+button{font-family:inherit; cursor:pointer;}
+input{font-family:inherit;}
+@media(min-width:700px){body{padding:24px 0;}}
+.shell{max-width:var(--shell-w); margin:0 auto; background:var(--bg); min-height:100vh; display:flex; flex-direction:column;}
+@media(min-width:700px){.shell{min-height:calc(100vh - 48px); border-radius:26px; overflow:hidden; box-shadow:var(--shadow-soft); border:1px solid var(--border);}}
+
+.content{flex:1; padding:28px 22px; animation:fadeSlide .25s ease;}
+@keyframes fadeSlide{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);}}
+
+.brand-center{text-align:center; margin-bottom:8px;}
+.brand-mark{width:56px; height:56px; border-radius:16px; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'El Messiri'; font-weight:700; font-size:24px; margin:0 auto 12px;}
+.brand-center .bname{font-family:'El Messiri'; font-weight:700; font-size:24px;}
+.brand-center .tag{font-size:13px; color:var(--ink-soft); margin-top:2px;}
+.brand-center .slogan{font-size:12.5px; color:var(--ink-faint); margin-top:10px; line-height:1.6;}
+
+.back-btn{width:36px; height:36px; border-radius:50%; border:1px solid var(--border); background:var(--surface); display:flex; align-items:center; justify-content:center; color:var(--ink); margin-bottom:18px;}
+
+.role-card{display:flex; align-items:center; gap:14px; width:100%; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:18px; margin-bottom:14px; text-align:right; box-shadow:0 6px 18px -12px rgba(43,36,56,.18);}
+.role-card .badge{width:50px; height:50px; border-radius:15px; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0;}
+.role-card .r-title{font-weight:800; font-size:16px; margin-bottom:2px;}
+.role-card .r-sub{font-size:12.3px; color:var(--ink-soft);}
+
+.tabs{display:flex; background:var(--primary-soft); border-radius:14px; padding:4px; margin-bottom:22px;}
+.tab{flex:1; border:none; background:none; padding:10px; border-radius:11px; font-weight:700; font-size:13.5px; color:var(--ink-soft);}
+.tab.active{background:var(--surface); color:var(--primary); box-shadow:0 4px 10px -6px rgba(43,36,56,.25);}
+
+.field{margin-bottom:15px;}
+.field label{display:block; font-size:13px; font-weight:700; margin-bottom:6px;}
+.field input{width:100%; border:1.5px solid var(--border); border-radius:12px; padding:12px 13px; font-size:14px; background:var(--surface); color:var(--ink);}
+.field .hint{font-size:11.5px; color:var(--ink-faint); margin-top:5px;}
+
+.btn{border:none; border-radius:14px; padding:13px 16px; font-weight:700; font-size:14.5px; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;}
+.btn-primary{background:var(--primary); color:#fff;}
+.btn-coral{background:var(--coral); color:#fff;}
+
+.alert{border-radius:12px; padding:11px 13px; font-size:12.8px; margin-bottom:16px; line-height:1.6;}
+.alert.error{background:var(--danger-soft); color:var(--danger);}
+.alert.success{background:var(--skyblue-soft); color:#2B5877;}
+
+.dash-header{text-align:center; padding:10px 0 20px;}
+.dash-avatar{width:64px; height:64px; border-radius:50%; background:var(--primary-soft); color:var(--primary); display:flex; align-items:center; justify-content:center; font-family:'El Messiri'; font-weight:700; font-size:24px; margin:0 auto 12px;}
+.role-chip{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; padding:6px 13px; border-radius:999px; margin-top:6px;}
+.role-chip.student{background:var(--skyblue-soft); color:#2B5877;}
+.role-chip.teacher{background:var(--primary-soft); color:var(--primary);}
+.info-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px; margin-top:18px; font-size:13px; color:var(--ink-soft); line-height:1.8;}
+.link-btn{background:none; border:none; color:var(--ink-faint); font-size:12.5px; text-decoration:underline; display:block; text-align:center; margin:18px auto 0;}
