@@ -7,6 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
+import { fetchSubjects, fetchLessons, fetchLesson, seedInitialContent, addLesson } from "./content.js";
 
 /* ---------- Firebase init ---------- */
 const app = initializeApp(firebaseConfig);
@@ -15,16 +16,34 @@ const db = getFirestore(app);
 
 /* ---------- state ---------- */
 const state = {
-  view: 'loading',      // loading | landing | authForm | dashboard
-  role: null,            // 'student' | 'teacher'
+  view: 'loading',      // loading | landing | authForm | studentHome | subjectLessons | lessonDetail | teacherHome
+  role: null,            // 'student' | 'teacher'  (chosen on the landing screen)
   mode: 'login',         // 'login' | 'signup'
   loading: false,
   error: '',
   success: '',
   profile: null,         // {uid, role, displayName, email, points}
+  subjects: [],
+  lessons: [],
+  currentLesson: null,
+  history: [],           // in-app back stack once inside student/teacher screens
 };
 
 function setState(patch){ Object.assign(state, patch); render(); }
+
+function showToast(msg){
+  const old = document.querySelector('.toast');
+  if(old) old.remove();
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.querySelector('.shell').appendChild(t);
+  setTimeout(() => t.remove(), 2400);
+}
+
+function comingSoon(){
+  showToast('🚧 هذي الميزة بتُبنى بمرحلة قادمة');
+}
 
 /* ---------- Arabic error messages ---------- */
 function mapAuthError(err){
@@ -86,33 +105,88 @@ async function handleLogin({email, password}){
 }
 
 async function loadProfileAndGo(uid){
+  setState({view:'loading'});
   const snap = await getDoc(doc(db, 'users', uid));
   if(!snap.exists()){
-    setState({loading:false, error:'تعذّر إيجاد ملف الحساب. حاولي تسجيل الدخول مرة أخرى.'});
+    setState({loading:false, error:'تعذّر إيجاد ملف الحساب. حاولي تسجيل الدخول مرة أخرى.', view:'landing'});
     await signOut(auth);
     return;
   }
-  setState({loading:false, profile: snap.data(), view:'dashboard'});
+  const profile = snap.data();
+  const subjects = await fetchSubjects(db).catch(() => []);
+  let lessons = [];
+  if(subjects.length){
+    lessons = await fetchLessons(db, subjects[0].id).catch(() => []);
+  }
+  setState({
+    loading:false, profile, subjects, lessons, history:[],
+    view: profile.role === 'teacher' ? 'teacherHome' : 'studentHome',
+  });
 }
 
 async function handleLogout(){
   await signOut(auth);
-  setState({view:'landing', role:null, mode:'login', profile:null, error:'', success:''});
+  setState({view:'landing', role:null, mode:'login', profile:null, error:'', success:'', history:[]});
+}
+
+/* ---------- in-app navigation (after login) ---------- */
+function navigate(view, extra={}){
+  state.history.push(state.view);
+  setState({view, ...extra});
+}
+function goBack(){
+  const prev = state.history.pop();
+  if(prev) setState({view: prev});
+  else setState({view: state.profile?.role === 'teacher' ? 'teacherHome' : 'studentHome'});
+}
+async function openSubjectLessons(){
+  if(!state.subjects.length){ showToast('المحتوى لسه ما تهيّأ من المعلمة.'); return; }
+  const lessons = await fetchLessons(db, state.subjects[0].id).catch(() => []);
+  navigate('subjectLessons', {lessons});
+}
+async function openLesson(lessonId){
+  const lesson = await fetchLesson(db, lessonId).catch(() => null);
+  navigate('lessonDetail', {currentLesson: lesson});
+}
+async function runSeed(){
+  setState({loading:true});
+  try{
+    const res = await seedInitialContent(db);
+    const subjects = await fetchSubjects(db).catch(() => []);
+    const lessons = subjects.length ? await fetchLessons(db, subjects[0].id).catch(() => []) : [];
+    setState({loading:false, subjects, lessons});
+    showToast(`✅ تم إنشاء ${res.subjects} مادة و${res.lessons} دروس`);
+  }catch(err){
+    setState({loading:false});
+    showToast('صار خطأ أثناء التهيئة. تأكدي إنك مسجّلة كمعلمة.');
+  }
+}
+async function handleAddLesson(title){
+  if(!state.subjects.length){ showToast('هيّئي المحتوى الأساسي أول شي.'); return; }
+  setState({loading:true});
+  try{
+    const subjectId = state.subjects[0].id;
+    const newLesson = await addLesson(db, subjectId, title, state.lessons);
+    setState({loading:false, lessons:[...state.lessons, newLesson]});
+    showToast(`✅ تمت إضافة درس «${title}»`);
+  }catch(err){
+    setState({loading:false});
+    showToast('صار خطأ أثناء إضافة الدرس. تأكدي إنك مسجّلة كمعلمة.');
+  }
 }
 
 /* ---------- keep session on reload ---------- */
 onAuthStateChanged(auth, async (user) => {
-  if(user && state.view === 'loading'){
+  if(user && state.view === 'loading' && !state.profile){
     await loadProfileAndGo(user.uid);
-    if(state.view === 'loading') setState({view:'landing'});
   } else if(!user && state.view !== 'landing' && state.view !== 'authForm'){
     setState({view:'landing'});
-  } else if(state.view === 'loading'){
+  } else if(state.view === 'loading' && !user){
     setState({view:'landing'});
   }
 });
 
-/* ---------- render ---------- */
+/* ---------- shared UI pieces ---------- */
 function brandHeader(sub){
   return `
   <div class="brand-center">
@@ -122,7 +196,36 @@ function brandHeader(sub){
     ${sub ? `<div class="slogan">${sub}</div>` : ''}
   </div>`;
 }
+function pageHead(title, sub){
+  return `
+  <div class="page-head">
+    <button class="back-btn" data-action="back">←</button>
+    <div><h2>${title}</h2>${sub?`<div class="p-sub">${sub}</div>`:''}</div>
+  </div>`;
+}
+function studentNav(){
+  const active = v => state.view === v ? 'active' : '';
+  return `
+  <div class="bottomnav">
+    <button class="navitem ${active('studentHome')}" data-action="nav-student-home"><span class="ic-wrap">🏠</span>الرئيسية</button>
+    <button class="navitem ${active('subjectLessons')||active('lessonDetail')}" data-action="nav-lessons"><span class="ic-wrap">📚</span>الدروس</button>
+    <button class="navitem" data-action="coming-soon"><span class="nav-raised">💡</span></button>
+    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">🆘</span>الأسئلة</button>
+    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">🏆</span>إنجازي</button>
+  </div>`;
+}
+function teacherNav(){
+  const active = v => state.view === v ? 'active' : '';
+  return `
+  <div class="bottomnav">
+    <button class="navitem ${active('teacherHome')}" data-action="nav-teacher-home"><span class="ic-wrap">🏠</span>الرئيسية</button>
+    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">📥</span>المراجعة</button>
+    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">❓</span>الأسئلة</button>
+    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">📊</span>الإحصائيات</button>
+  </div>`;
+}
 
+/* ---------- auth views ---------- */
 function viewLanding(){
   return `
   <div class="content">
@@ -138,7 +241,6 @@ function viewLanding(){
     </button>
   </div>`;
 }
-
 function viewAuthForm(){
   const isTeacher = state.role === 'teacher';
   const isSignup = state.mode === 'signup';
@@ -182,36 +284,148 @@ function viewAuthForm(){
   </div>`;
 }
 
-function viewDashboard(){
+/* ---------- student views ---------- */
+function viewStudentHome(){
   const p = state.profile || {};
-  const isTeacher = p.role === 'teacher';
+  const lessons = state.lessons || [];
+  const subj = state.subjects[0];
   return `
-  <div class="content">
+  <div class="content-home">
+    <div class="hero">
+      <div class="hero-top">
+        <div class="brand-mini"><div class="bm-mark">P</div><div class="bm-name">PeerUp</div></div>
+        <div class="hero-avatar">🙋‍♀️</div>
+      </div>
+      <h1>صباح الخير، ${p.displayName || ''} 👋</h1>
+      <p class="sub">وش ودك تسوين اليوم؟</p>
+    </div>
+    <div style="padding:0 18px;">
+      <button class="role-card disabled" data-action="coming-soon">
+        <div class="badge" style="background:var(--primary-soft)">💡</div>
+        <div><div class="r-title">فهمتها بطريقتي</div><div class="r-sub">شاركي زميلاتك طريقة فهمك — قريبًا</div></div>
+        <span class="chev">←</span>
+      </button>
+      <button class="role-card disabled" data-action="coming-soon">
+        <div class="badge" style="background:var(--coral-soft)">🆘</div>
+        <div><div class="r-title">أنقذوني!</div><div class="r-sub">في شيء مو فاهمته؟ اسألي زميلاتك — قريبًا</div></div>
+        <span class="chev">←</span>
+      </button>
+      <button class="role-card" data-action="nav-lessons">
+        <div class="badge" style="background:var(--skyblue-soft)">📚</div>
+        <div><div class="r-title">أبي أفهم</div><div class="r-sub">شوفي دروس ${subj ? subj.name : 'المادة'}</div></div>
+        <span class="chev">←</span>
+      </button>
+
+      ${lessons.length ? `
+      <div class="section-title">📚 دروس ${subj ? subj.name : ''}</div>
+      <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
+        ${lessons.map(l => `
+          <div class="list-row" data-action="nav-lesson" data-id="${l.id}">
+            <div class="badge sm" style="background:var(--primary-soft)">${subj ? subj.emoji : '📘'}</div>
+            <div><div class="r-title">${l.title}</div><div class="r-meta">اضغطي لعرض الدرس</div></div>
+            <span class="chev">←</span>
+          </div>`).join('')}
+      </div>` : `
+      <div class="empty-state" style="margin-top:24px;">
+        <span class="emoji">📭</span>
+        المحتوى لسه ما تهيّأ. اطلبي من معلمتك تسجل دخولها وتضغط زر "تهيئة المحتوى" من لوحتها.
+      </div>`}
+    </div>
+  </div>`;
+}
+
+function viewSubjectLessons(){
+  const subj = state.subjects[0];
+  const lessons = state.lessons || [];
+  return `
+  <div class="content-app">
+    ${pageHead('تعلّمي من زميلاتك', 'اختاري الدرس اللي تبين تشوفينه')}
+    ${subj ? `<div class="subject-tag">${subj.emoji} ${subj.name}</div>` : ''}
+    ${lessons.length ? `
+    <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
+      ${lessons.map(l => `
+        <div class="list-row" data-action="nav-lesson" data-id="${l.id}">
+          <div class="badge sm" style="background:var(--primary-soft)">${subj ? subj.emoji : '📘'}</div>
+          <div><div class="r-title">${l.title}</div><div class="r-meta">اضغطي لعرض الدرس</div></div>
+          <span class="chev">←</span>
+        </div>`).join('')}
+    </div>` : `
+    <div class="empty-state"><span class="emoji">📭</span>ما فيه دروس بعد.</div>`}
+  </div>`;
+}
+
+function viewLessonDetail(){
+  const l = state.currentLesson;
+  return `
+  <div class="content-app">
+    ${pageHead(l ? l.title : 'الدرس', '🧲 الفيزياء')}
+    <div class="section-title">💡 شروحات الطالبات المعتمدة</div>
+    <div class="empty-state">
+      <span class="emoji">💭</span>
+      لسه ما فيه شروحات لهالدرس — ميزة المشاركة بتُبنى بالمرحلة القادمة.
+    </div>
+    <div class="section-title">🆘 الأسئلة المتعلقة بالدرس</div>
+    <div class="empty-state">
+      <span class="emoji">🆘</span>
+      لسه ما فيه أسئلة لهالدرس — ميزة الأسئلة بتُبنى بالمرحلة القادمة.
+    </div>
+  </div>`;
+}
+
+/* ---------- teacher views ---------- */
+function viewTeacherHome(){
+  const p = state.profile || {};
+  const subjCount = state.subjects.length;
+  const lessonCount = state.lessons.length;
+  return `
+  <div class="content-app">
     <div class="dash-header">
       <div class="dash-avatar">${(p.displayName||'?')[0]}</div>
       <h2 style="margin:0;">${p.displayName || ''}</h2>
-      <span class="role-chip ${isTeacher?'teacher':'student'}">${isTeacher? '👩🏻‍🏫 معلمة' : '👩🏻‍🎓 طالبة'}</span>
+      <span class="role-chip teacher">👩🏻‍🏫 معلمة</span>
     </div>
     <div class="info-card">
-      ✅ تم تسجيل الدخول بنجاح، وتم التحقق من صلاحيتك (${p.role}) عبر Firestore.
+      المواد الحالية: <b>${subjCount}</b> — الدروس: <b>${lessonCount}</b>
+      ${subjCount===0 ? `
       <br><br>
-      هذه المرحلة (المرحلة 1) تغطي فقط: تسجيل الدخول/إنشاء الحساب، وتحديد الدور (طالبة/معلمة)،
-      وحماية صلاحية المعلمة برمز التفعيل. الصفحة الرئيسية الكاملة والدروس والمشاركات
-      ستُبنى في المراحل التالية.
+      ما فيه محتوى بعد. اضغطي الزر تحت مرة وحدة بس عشان تُنشئ مادة الفيزياء
+      ودروسها التجريبية الأربعة في قاعدة البيانات.` : `
+      <br><br>
+      ✅ المحتوى الأساسي جاهز. لوحة المراجعة والإحصائيات بتُبنى بالمراحل القادمة.`}
     </div>
+    ${subjCount===0 ? `<button class="btn btn-primary" style="margin-top:14px;" data-action="seed-content" ${state.loading?'disabled':''}>${state.loading?'جارِ التهيئة...':'➕ تهيئة المحتوى الأساسي'}</button>` : `
+    <div class="section-title">إضافة درس جديد لمادة ${state.subjects[0] ? state.subjects[0].name : ''}</div>
+    <form id="addLessonForm">
+      <div class="field">
+        <input type="text" id="newLessonTitle" placeholder="مثال: قوانين نيوتن للحركة" required>
+      </div>
+      <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الإضافة...':'➕ إضافة الدرس'}</button>
+    </form>
+    <div class="section-title">الدروس الحالية (${lessonCount})</div>
+    <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
+      ${state.lessons.map(l => `
+        <div class="list-row" style="cursor:default;">
+          <div><div class="r-title">${l.title}</div></div>
+        </div>`).join('')}
+    </div>`}
     <button class="link-btn" data-action="logout">تسجيل الخروج</button>
   </div>`;
 }
 
+/* ---------- main render ---------- */
 function render(){
   const app = document.getElementById('app');
   if(state.view === 'loading'){
     app.innerHTML = `<div class="content" style="text-align:center; padding-top:80px; color:var(--ink-soft); font-size:13px;">جارِ التحميل...</div>`;
     return;
   }
-  if(state.view === 'landing') app.innerHTML = viewLanding();
-  else if(state.view === 'authForm') app.innerHTML = viewAuthForm();
-  else if(state.view === 'dashboard') app.innerHTML = viewDashboard();
+  if(state.view === 'landing'){ app.innerHTML = viewLanding(); return; }
+  if(state.view === 'authForm'){ app.innerHTML = viewAuthForm(); return; }
+  if(state.view === 'studentHome'){ app.innerHTML = viewStudentHome() + studentNav(); return; }
+  if(state.view === 'subjectLessons'){ app.innerHTML = viewSubjectLessons() + studentNav(); return; }
+  if(state.view === 'lessonDetail'){ app.innerHTML = viewLessonDetail() + studentNav(); return; }
+  if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
+  app.innerHTML = viewLanding();
 }
 
 /* ---------- events ---------- */
@@ -227,10 +441,32 @@ document.addEventListener('click', (e) => {
     setState({mode: el.dataset.mode, error:'', success:''});
   } else if(action === 'logout'){
     handleLogout();
+  } else if(action === 'back'){
+    goBack();
+  } else if(action === 'nav-student-home'){
+    setState({view:'studentHome', history:[]});
+  } else if(action === 'nav-teacher-home'){
+    setState({view:'teacherHome', history:[]});
+  } else if(action === 'nav-lessons'){
+    openSubjectLessons();
+  } else if(action === 'nav-lesson'){
+    openLesson(el.dataset.id);
+  } else if(action === 'seed-content'){
+    runSeed();
+  } else if(action === 'coming-soon'){
+    comingSoon();
   }
 });
 
 document.addEventListener('submit', (e) => {
+  if(e.target.id === 'addLessonForm'){
+    e.preventDefault();
+    const input = document.getElementById('newLessonTitle');
+    const title = input.value.trim();
+    if(!title) return;
+    handleAddLesson(title);
+    return;
+  }
   if(e.target.id !== 'authForm') return;
   e.preventDefault();
   const email = document.getElementById('email').value.trim();
