@@ -172,7 +172,7 @@ function viewAuthForm(){
       ${isTeacher && isSignup ? `
       <div class="field">
         <label>رمز تفعيل المعلمات</label>
-        <input type="text" id="teacherCode" placeholder="مثال: PEERUP-TCH-2026" required>
+        <input type="text" id="teacherCode" placeholder="مثال: PEERUP-TCH" required>
         <div class="hint">رمز التفعيل من إدارة المدرسة. هذا ليس كلمة مرور حسابك.</div>
       </div>` : ''}
       <button type="submit" class="btn ${isTeacher?'btn-primary':'btn-coral'}" ${state.loading?'disabled':''}>
