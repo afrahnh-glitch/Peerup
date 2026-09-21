@@ -71,3 +71,45 @@ input{font-family:inherit;}
 .role-chip.teacher{background:var(--primary-soft); color:var(--primary);}
 .info-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px; margin-top:18px; font-size:13px; color:var(--ink-soft); line-height:1.8;}
 .link-btn{background:none; border:none; color:var(--ink-faint); font-size:12.5px; text-decoration:underline; display:block; text-align:center; margin:18px auto 0;}
+
+/* ---------- app shell (post-login pages) ---------- */
+.content-app{flex:1; padding:18px 18px 100px; animation:fadeSlide .25s ease;}
+.content-home{flex:1; padding:0 0 100px; animation:fadeSlide .25s ease;}
+
+.hero{background:linear-gradient(135deg, var(--primary-soft) 0%, var(--skyblue-soft) 100%); border-radius:0 0 30px 30px; padding:22px 20px 24px; margin-bottom:20px;}
+.hero-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+.hero .brand-mini{display:flex; align-items:center; gap:9px;}
+.hero .brand-mini .bm-mark{width:32px; height:32px; border-radius:10px; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'El Messiri'; font-weight:700; font-size:14px;}
+.hero .brand-mini .bm-name{font-family:'El Messiri'; font-weight:700; font-size:15px;}
+.hero h1{margin:0 0 5px; font-size:20px; font-weight:700;}
+.hero p.sub{margin:0; color:var(--ink-soft); font-size:13.5px;}
+.hero-avatar{width:38px; height:38px; border-radius:50%; background:var(--surface); display:flex; align-items:center; justify-content:center; font-size:16px; border:1px solid rgba(255,255,255,.7);}
+
+.page-head{display:flex; align-items:center; gap:10px; padding:6px 2px 18px;}
+.page-head h2{margin:0; font-size:18px; font-weight:700;}
+.page-head .p-sub{font-size:12px; color:var(--ink-soft); margin-top:1px;}
+
+.section-title{margin:22px 0 12px; font-size:15px; font-weight:700;}
+.subject-tag{display:inline-flex; align-items:center; gap:6px; background:var(--primary-soft); color:var(--primary); font-weight:700; font-size:13px; padding:8px 14px; border-radius:12px; margin-bottom:14px;}
+
+.role-card .chev{margin-inline-start:auto; color:var(--ink-faint); flex-shrink:0;}
+.role-card.disabled{opacity:.55;}
+
+.list-row{display:flex; align-items:center; gap:12px; padding:14px 4px; border-bottom:1px solid var(--border); cursor:pointer;}
+.list-row:last-child{border-bottom:none;}
+.list-row .r-title{font-weight:700; font-size:14.5px; margin-bottom:2px;}
+.list-row .r-meta{font-size:12px; color:var(--ink-soft);}
+.list-row .chev{margin-inline-start:auto; color:var(--ink-faint); flex-shrink:0;}
+.badge.sm{width:36px; height:36px; border-radius:11px; font-size:16px;}
+
+.empty-state{text-align:center; padding:28px 14px; color:var(--ink-soft); border:1.5px dashed var(--border); border-radius:16px; font-size:13.3px; line-height:1.7;}
+.empty-state .emoji{font-size:26px; display:block; margin-bottom:8px;}
+
+.toast{position:fixed; bottom:96px; left:50%; transform:translateX(-50%); max-width:calc(var(--shell-w) - 40px); background:var(--ink); color:#fff; padding:12px 18px; border-radius:14px; font-size:12.8px; font-weight:500; z-index:80; box-shadow:0 14px 30px -12px rgba(0,0,0,.4);}
+
+/* bottom nav */
+.bottomnav{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:var(--shell-w); background:rgba(251,249,244,.94); backdrop-filter:blur(10px); border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-around; padding:8px 6px calc(8px + env(safe-area-inset-bottom)); z-index:60;}
+.navitem{display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; color:var(--ink-faint); font-size:10px; font-weight:700; padding:4px 6px;}
+.navitem.active{color:var(--primary);}
+.navitem .ic-wrap{height:20px; display:flex; align-items:center; font-size:18px;}
+.nav-raised{width:46px; height:46px; border-radius:50%; background:var(--coral); color:#fff; display:flex; align-items:center; justify-content:center; margin-top:-22px; box-shadow:0 10px 22px -8px rgba(240,104,75,.65); border:4px solid var(--bg); font-size:18px;}
