@@ -1,19 +1,502 @@
-/* موارد التعلم */
-.resources-row { display: flex; gap: var(--space-3); margin: 0 var(--space-4) var(--space-5); overflow-x: auto; scrollbar-width: none; }
-.resources-row::-webkit-scrollbar { display: none; }
-.resource-card { flex: 0 0 96px; height: 128px; border-radius: var(--radius-md); display: flex; flex-direction: column; justify-content: flex-end; padding: var(--space-3); color: var(--text-inverse); font-size: 11.5px; font-weight: 700; box-shadow: var(--shadow-card); }
-.resource-card--tests { background: linear-gradient(160deg, #7C9CF7, #5B7CE8); }
-.resource-card--laws { background: linear-gradient(160deg, #B79CF5, #9B7CE8); }
-.resource-card--summaries { background: linear-gradient(160deg, #6FCBA3, #4CAF8C); }
-.resource-card--videos { background: linear-gradient(160deg, #F5A96F, #F0895B); }
 
-/* شريط التنقل السفلي */
-.bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: var(--bg-base); border-top: 1px solid var(--border-hairline); display: flex; align-items: center; justify-content: space-around; padding: var(--space-2) var(--space-4); padding-bottom: max(var(--space-2), env(safe-area-inset-bottom, 0px)); box-shadow: 0 -4px 16px rgba(30, 39, 73, 0.05); }
-.nav-icon { color: var(--brand-purple-dark); opacity: 0.55; width: 24px; height: 24px; }
-.nav-icon.active { opacity: 1; }
-.nav-fab { width: 52px; height: 52px; border-radius: 50%; background: var(--brand-purple); color: var(--text-inverse); display: flex; align-items: center; justify-content: center; font-size: 26px; margin-top: -28px; box-shadow: 0 6px 16px rgba(155, 135, 245, 0.45); }
+:root {
+  /* --- Color: Base space surfaces --- */
+  --pu-void-950: #06071a;         /* أعمق نقطة في الخلفية */
+  --pu-void-900: #0a0c22;         /* الخلفية الأساسية */
+  --pu-night-850: #10122c;        /* كحلي ليلي */
+  --pu-nebula-800: #171638;       /* بنفسجي داكن جدًا */
+  --pu-nebula-700: #201d47;       /* سطح البطاقات الأساسي */
+  --pu-nebula-600: #2a2657;       /* سطح مرتفع / hover */
+  --pu-border-soft: #35315f;      /* حدود ناعمة */
 
-@media (max-width: 360px) {
-  .service-grid { grid-template-columns: 1fr 1fr; gap: var(--space-2); }
-  .hero-card h2 { font-size: 15px; }
+  /* --- Color: Accents (استخدام متزن، ليس Neon بالكامل) --- */
+  --pu-violet-500: #8b6bf2;       /* بنفسجي فضائي أساسي */
+  --pu-violet-400: #a58bf7;
+  --pu-blue-500: #5b8ef7;         /* أزرق سماوي */
+  --pu-cyan-400: #45d8e6;         /* Cyan */
+  --pu-fuchsia-300: #e59fd0;      /* وردي/فوشيا خفيف جدًا — استخدام محدود */
+
+  /* --- Color: Text --- */
+  --pu-text-primary: #eef1fc;     /* أبيض مائل للزرقة */
+  --pu-text-secondary: #b7bce0;
+  --pu-text-muted: #7d81a8;
+  --pu-text-on-accent: #0a0c22;
+
+  /* --- Color: Feedback --- */
+  --pu-success-500: #46c98a;
+  --pu-success-bg: rgba(70, 201, 138, 0.12);
+  --pu-error-500: #f0617a;
+  --pu-error-bg: rgba(240, 97, 122, 0.12);
+  --pu-warning-500: #f2b155;
+  --pu-warning-bg: rgba(242, 177, 85, 0.12);
+  --pu-info-500: var(--pu-cyan-400);
+  --pu-info-bg: rgba(69, 216, 230, 0.1);
+
+  /* --- Gradients --- */
+  --pu-gradient-primary: linear-gradient(90deg, var(--pu-violet-500) 0%, var(--pu-blue-500) 55%, var(--pu-cyan-400) 100%);
+  --pu-gradient-primary-soft: linear-gradient(90deg, rgba(139,107,242,0.85) 0%, rgba(91,142,247,0.85) 55%, rgba(69,216,230,0.85) 100%);
+  --pu-gradient-nebula-bg: radial-gradient(60% 50% at 80% 0%, rgba(139,107,242,0.16) 0%, rgba(10,12,34,0) 60%),
+                            radial-gradient(50% 40% at 10% 100%, rgba(69,216,230,0.10) 0%, rgba(10,12,34,0) 60%),
+                            linear-gradient(180deg, var(--pu-void-950) 0%, var(--pu-night-850) 60%, var(--pu-void-900) 100%);
+  --pu-glow-violet: 0 0 24px rgba(139, 107, 242, 0.35);
+  --pu-glow-cyan: 0 0 24px rgba(69, 216, 230, 0.3);
+
+  /* --- Typography --- */
+  --pu-font-base: 'Tajawal', 'Segoe UI', Tahoma, sans-serif;
+  --pu-fs-page-title: 1.75rem;    /* 28px */
+  --pu-fs-section-title: 1.25rem;/* 20px */
+  --pu-fs-card-title: 1.05rem;   /* ~17px */
+  --pu-fs-body: 0.95rem;         /* ~15px */
+  --pu-fs-caption: 0.8rem;       /* ~13px */
+  --pu-fs-label: 0.8rem;
+  --pu-fs-button: 0.95rem;
+  --pu-lh-tight: 1.3;
+  --pu-lh-normal: 1.6;
+  --pu-lh-loose: 1.8;
+  --pu-fw-regular: 400;
+  --pu-fw-medium: 500;
+  --pu-fw-bold: 700;
+  --pu-fw-extrabold: 800;
+
+  /* --- Spacing scale --- */
+  --pu-space-1: 4px;
+  --pu-space-2: 8px;
+  --pu-space-3: 12px;
+  --pu-space-4: 16px;
+  --pu-space-5: 20px;
+  --pu-space-6: 24px;
+  --pu-space-8: 32px;
+  --pu-space-10: 40px;
+  --pu-space-12: 48px;
+  --pu-space-16: 64px;
+
+  /* --- Radius --- */
+  --pu-radius-sm: 8px;
+  --pu-radius-md: 14px;
+  --pu-radius-lg: 20px;
+  --pu-radius-xl: 28px;
+  --pu-radius-pill: 999px;
+
+  /* --- Shadows --- */
+  --pu-shadow-sm: 0 2px 8px rgba(4, 5, 16, 0.35);
+  --pu-shadow-md: 0 8px 24px rgba(4, 5, 16, 0.45);
+  --pu-shadow-lg: 0 16px 40px rgba(4, 5, 16, 0.55);
+  --pu-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* --- Transitions --- */
+  --pu-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --pu-duration-fast: 150ms;
+  --pu-duration-base: 200ms;
+  --pu-duration-slow: 300ms;
+  /* --- Z-index scale --- */
+  --pu-z-base: 0;
+  --pu-z-card: 10;
+  --pu-z-sticky: 100;
+  --pu-z-nav: 200;
+  --pu-z-overlay: 300;
+  --pu-z-modal: 400;
+  --pu-z-toast: 500;
+
+  /* --- Touch targets --- */
+  --pu-touch-min: 44px;
 }
+
+/* Light-surface tokens: تُستخدم فقط إذا كانت مناطق فاتحة موجودة أصلًا في الواجهة.
+   لا تغيّر بنية الصفحة — فقط أضف الكلاس .pu-surface-light على العنصر الموجود. */
+.pu-surface-light {
+  --pu-void-950: #f5f6fb;
+  --pu-void-900: #ffffff;
+  --pu-night-850: #eef0fa;
+  --pu-nebula-800: #ffffff;
+  --pu-nebula-700: #ffffff;
+  --pu-nebula-600: #f1f2fb;
+  --pu-border-soft: #dfe1f2;
+  --pu-text-primary: #171a33;
+  --pu-text-secondary: #4b4f72;
+  --pu-text-muted: #8083a3;
+  --pu-shadow-sm: 0 2px 8px rgba(23, 26, 51, 0.06);
+  --pu-shadow-md: 0 8px 24px rgba(23, 26, 51, 0.08);
+  --pu-shadow-lg: 0 16px 40px rgba(23, 26, 51, 0.12);
+}
+
+/* --------------------------------------------------------------------------
+   2) BASE / RESET (خفيف — لا يفرض بنية جديدة)
+   -------------------------------------------------------------------------- */
+.pu-root, .pu-app {
+  direction: rtl;
+  font-family: var(--pu-font-base);
+  color: var(--pu-text-primary);
+  background: var(--pu-void-900);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.pu-root *, .pu-app * {
+  box-sizing: border-box;
+}
+
+.pu-root a { color: inherit; text-decoration: none; }
+
+.pu-root ::selection {
+  background: rgba(139, 107, 242, 0.35);
+  color: var(--pu-text-primary);
+}
+
+.pu-root ::-webkit-scrollbar { width: 8px; height: 8px; }
+.pu-root ::-webkit-scrollbar-track { background: transparent; }
+.pu-root ::-webkit-scrollbar-thumb {
+  background: var(--pu-border-soft);
+  border-radius: var(--pu-radius-pill);
+}
+
+/* --------------------------------------------------------------------------
+   3) SPACE BACKGROUND UTILITIES
+   -------------------------------------------------------------------------- */
+
+/* الخلفية الأساسية: تدرجات Nebula ناعمة + نجوم CSS بحتة (بدون صور) */
+.pu-bg-space {
+  position: relative;
+  background: var(--pu-gradient-nebula-bg);
+  background-color: var(--pu-void-900);
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* طبقة النجوم: تُبنى بثلاث طبقات radial-gradient متكررة بأحجام مختلفة.
+   خفيفة جدًا ومتباعدة — ليست مزدحمة. */
+.pu-bg-space::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, rgba(238,241,252,0.55) 50%, transparent 51%),
+    radial-gradient(1px 1px at 80% 12%, rgba(238,241,252,0.4) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 35% 65%, rgba(238,241,252,0.5) 50%, transparent 51%),
+    radial-gradient(1px 1px at 60% 80%, rgba(238,241,252,0.35) 50%, transparent 51%),
+    radial-gradient(1px 1px at 90% 55%, rgba(238,241,252,0.4) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 20% 90%, rgba(238,241,252,0.3) 50%, transparent 51%),
+    radial-gradient(1px 1px at 50% 35%, rgba(238,241,252,0.45) 50%, transparent 51%);
+  background-repeat: repeat;
+  background-size: 340px 340px;
+  opacity: 0.6;
+}
+
+/* طبقة توهج Nebula إضافية خلف المحتوى مباشرة */
+.pu-bg-space::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(45% 35% at 85% 8%, rgba(139,107,242,0.14), transparent 60%),
+              radial-gradient(40% 30% at 5% 95%, rgba(69,216,230,0.10), transparent 60%);
+}
+
+.pu-bg-space > * { position: relative; z-index: 1; }
+
+/* توهج محيطي خفيف حول عنصر مهم (استخدم بحرص، ليس على كل شيء) */
+.pu-glow-accent {
+  box-shadow: var(--pu-glow-violet);
+}
+.pu-glow-cyan {
+  box-shadow: var(--pu-glow-cyan);
+}
+
+/* خط مداري بسيط — للاستخدام كفاصل بصري أو خلف Avatar/تقدم */
+.pu-orbit-divider {
+  position: relative;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--pu-border-soft) 20%, var(--pu-border-soft) 80%, transparent);
+  margin: var(--pu-space-6) 0;
+}
+/* نقطة ضوئية صغيرة (indicator) — لإشارات حالة/تعاون خفيفة */
+.pu-dot-glow {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pu-cyan-400);
+  box-shadow: 0 0 8px rgba(69, 216, 230, 0.7);
+}
+
+/* --------------------------------------------------------------------------
+   4) TYPOGRAPHY
+   -------------------------------------------------------------------------- */
+.pu-text-page-title {
+  font-size: var(--pu-fs-page-title);
+  font-weight: var(--pu-fw-extrabold);
+  line-height: var(--pu-lh-tight);
+  color: var(--pu-text-primary);
+  margin: 0 0 var(--pu-space-2);
+}
+
+.pu-text-section-title {
+  font-size: var(--pu-fs-section-title);
+  font-weight: var(--pu-fw-bold);
+  line-height: var(--pu-lh-tight);
+  color: var(--pu-text-primary);
+  margin: 0 0 var(--pu-space-2);
+}
+
+.pu-text-card-title {
+  font-size: var(--pu-fs-card-title);
+  font-weight: var(--pu-fw-bold);
+  line-height: var(--pu-lh-tight);
+  color: var(--pu-text-primary);
+  margin: 0 0 var(--pu-space-1);
+}
+
+.pu-text-body {
+  font-size: var(--pu-fs-body);
+  font-weight: var(--pu-fw-regular);
+  line-height: var(--pu-lh-normal);
+  color: var(--pu-text-secondary);
+}
+
+.pu-text-caption {
+  font-size: var(--pu-fs-caption);
+  font-weight: var(--pu-fw-regular);
+  line-height: var(--pu-lh-normal);
+  color: var(--pu-text-muted);
+}
+
+.pu-text-label {
+  font-size: var(--pu-fs-label);
+  font-weight: var(--pu-fw-medium);
+  color: var(--pu-text-secondary);
+  display: inline-block;
+  margin-bottom: var(--pu-space-1);
+}
+
+.pu-text-gradient {
+  background: var(--pu-gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   5) CARDS
+   -------------------------------------------------------------------------- */
+.pu-card {
+  position: relative;
+  background: var(--pu-nebula-700);
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+  border: 1px solid var(--pu-border-soft);
+  border-radius: var(--pu-radius-lg);
+  padding: var(--pu-space-5);
+  box-shadow: var(--pu-shadow-md), var(--pu-shadow-inset);
+  transition: transform var(--pu-duration-base) var(--pu-ease),
+              border-color var(--pu-duration-base) var(--pu-ease),
+              box-shadow var(--pu-duration-base) var(--pu-ease);
+}
+
+/* Glassmorphism خفيف — للاستخدام فوق الخلفية الفضائية مباشرة */
+.pu-card--glass {
+  background: rgba(32, 29, 71, 0.5);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.pu-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(139, 107, 242, 0.4);
+  box-shadow: var(--pu-shadow-lg), var(--pu-glow-violet);
+}
+
+.pu-card--selected,
+.pu-card[aria-selected="true"] {
+  border-color: var(--pu-violet-400);
+  box-shadow: var(--pu-glow-violet), var(--pu-shadow-md);
+}
+.pu-card--selected::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: var(--pu-space-3);
+  bottom: var(--pu-space-3);
+  width: 3px;
+  border-radius: var(--pu-radius-pill);
+  background: var(--pu-gradient-primary);
+}
+
+.pu-card--flat {
+  box-shadow: none;
+  background: var(--pu-nebula-800);
+}
+
+.pu-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pu-space-3);
+  margin-bottom: var(--pu-space-3);
+}
+
+.pu-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pu-space-3);
+  margin-top: var(--pu-space-4);
+  padding-top: var(--pu-space-3);
+  border-top: 1px solid var(--pu-border-soft);
+}
+
+/* --------------------------------------------------------------------------
+   6) BUTTONS
+   -------------------------------------------------------------------------- */
+.pu-btn {
+  display: inline-flex;
+  align-items: center;
+  .pu-field__hint {
+  display: block;
+  margin-top: var(--pu-space-1);
+  font-size: var(--pu-fs-caption);
+  color: var(--pu-text-muted);
+}
+.pu-field__hint--error { color: var(--pu-error-500); }
+.pu-field__hint--success { color: var(--pu-success-500); }
+
+/* Search — حقل بحث بأيقونة داخل الحقل (RTL: الأيقونة يمين الحقل) */
+.pu-search {
+  position: relative;
+}
+.pu-search .pu-input {
+  padding-inline-end: var(--pu-space-10);
+}
+.pu-search__icon {
+  position: absolute;
+  inset-inline-end: var(--pu-space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--pu-text-muted);
+  pointer-events: none;
+}
+
+/* Select — سهم مخصص متوافق مع RTL (يظهر على يسار الحقل) */
+.pu-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--pu-text-secondary) 50%),
+                     linear-gradient(135deg, var(--pu-text-secondary) 50%, transparent 50%);
+  background-position: calc(var(--pu-space-4) + 5px) calc(50% - 2px),
+                        calc(var(--pu-space-4)) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-inline-start: var(--pu-space-8);
+}
+
+/* Checkbox / Radio */
+.pu-checkbox,
+.pu-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pu-space-2);
+  cursor: pointer;
+  font-size: var(--pu-fs-body);
+  color: var(--pu-text-secondary);
+}
+
+.pu-checkbox input,
+.pu-radio input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border: 1.5px solid var(--pu-border-soft);
+  background: var(--pu-nebula-800);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition: border-color var(--pu-duration-fast) var(--pu-ease),
+              background var(--pu-duration-fast) var(--pu-ease);
+}
+.pu-checkbox input { border-radius: 6px; }
+.pu-radio input { border-radius: 50%; }
+
+.pu-checkbox input::before,
+.pu-radio input::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  transform: scale(0);
+  transition: transform var(--pu-duration-fast) var(--pu-ease);
+  box-shadow: inset 1em 1em currentColor;
+}
+.pu-checkbox input::before { border-radius: 2px; background: var(--pu-gradient-primary); }
+.pu-radio input::before { border-radius: 50%; background: var(--pu-gradient-primary); }
+
+.pu-checkbox input:checked,
+.pu-radio input:checked { border-color: var(--pu-violet-400); }
+.pu-checkbox input:checked::before,
+.pu-radio input:checked::before { transform: scale(1); }
+
+.pu-checkbox input:focus-visible,
+.pu-radio input:focus-visible {
+  outline: 2px solid var(--pu-cyan-400);
+  outline-offset: 2px;
+}
+
+/* Toggle */
+.pu-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 44px;
+  height: 26px;
+}
+.pu-toggle input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: var(--pu-radius-pill);
+  background: var(--pu-nebula-600);
+  border: 1px solid var(--pu-border-soft);
+  cursor: pointer;
+  transition: background var(--pu-duration-base) var(--pu-ease);
+  position: relative;
+}
+.pu-toggle input::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--pu-text-primary);
+  transition: inset-inline-start var(--pu-duration-base) var(--pu-ease);
+}
+.pu-toggle input:checked {
+  background: var(--pu-gradient-primary);
+  border-color: transparent;
+}
+.pu-toggle input:checked::before {
+  inset-inline-start: calc(100% - 21px);
+  background: #06071a;
+}
+.pu-toggle input:focus-visible { outline: 2px solid var(--pu-cyan-400); outline-offset: 2px; }
+.pu-toggle input:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* --------------------------------------------------------------------------
+   8) NAVIGATION (قابل للتطبيق على Sidebar / Top nav / Bottom nav)
+  -------------------------------------------------------------------------- */
+.pu-nav {
+  background: rgba(16, 18, 44, 0.85);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-color: var(--pu-border-soft);
+  z-index: var(--pu-z-nav);
+}
+
+/* استخدم كأي اتجاه: أضف الكلاس الفرعي المناسب حسب نوع الـ Navigation الموجود */
+.pu-nav--top {
+  border-bottom: 1px solid var(--pu-border-soft);
+}
+.pu-n 
