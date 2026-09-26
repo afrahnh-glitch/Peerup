@@ -29,17 +29,26 @@ export async function addLesson(db, subjectId, title, existingLessons){
   return {id: docRef.id, subjectId, title, order: nextOrder};
 }
 
-// تُستخدم مرة واحدة فقط من لوحة المعلمة لتهيئة مادة الفيزياء ودروسها التجريبية.
+// تُستخدم من لوحة المعلمة لتهيئة مادة الفيزياء ودروسها.
 // آمنة للتكرار: تكتب فوق نفس المستندات بنفس القيم إن استُدعيت أكثر من مرة.
 export async function seedInitialContent(db){
   const subjects = [
     {id: 'physics', name: 'الفيزياء', emoji: '🧲', order: 1},
   ];
   const lessons = [
-    {id: 'balance',  subjectId: 'physics', title: 'الاتزان ومركز الكتلة', order: 1},
-    {id: 'torque',   subjectId: 'physics', title: 'العزم',                 order: 2},
-    {id: 'rotation', subjectId: 'physics', title: 'الحركة الدورانية',      order: 3},
-    {id: 'energy',   subjectId: 'physics', title: 'حفظ الطاقة',            order: 4},
+    {id: 'planetary-motion',        subjectId: 'physics', title: 'حركة الكواكب والجاذبية',                         order: 1},
+    {id: 'gravitation-law',         subjectId: 'physics', title: 'قانون الجذب الكوني',                              order: 2},
+    {id: 'rotational-motion-desc',  subjectId: 'physics', title: 'وصف الحركة الدورانية',                           order: 3},
+    {id: 'rotational-dynamics',     subjectId: 'physics', title: 'ديناميكا الحركة الدورانية',                      order: 4},
+    {id: 'equilibrium',             subjectId: 'physics', title: 'الاتزان',                                        order: 5},
+    {id: 'impulse-momentum',        subjectId: 'physics', title: 'الدفع والزخم',                                   order: 6},
+    {id: 'momentum-conservation',   subjectId: 'physics', title: 'حفظ الزخم',                                      order: 7},
+    {id: 'energy-work',             subjectId: 'physics', title: 'الطاقة والشغل',                                  order: 8},
+    {id: 'machines',                subjectId: 'physics', title: 'الآلات',                                         order: 9},
+    {id: 'energy-forms',            subjectId: 'physics', title: 'الأشكال المتعددة للطاقة',                        order: 10},
+    {id: 'energy-conservation',     subjectId: 'physics', title: 'حفظ الطاقة',                                     order: 11},
+    {id: 'temperature-heat',        subjectId: 'physics', title: 'درجة الحرارة والطاقة الحرارية',                  order: 12},
+    {id: 'thermodynamics-laws',     subjectId: 'physics', title: 'تغيرات حالة المادة وقوانين الديناميكا الحرارية', order: 13},
   ];
   for(const s of subjects){ await setDoc(doc(db, 'subjects', s.id), s); }
   for(const l of lessons){ await setDoc(doc(db, 'lessons', l.id), l); }
