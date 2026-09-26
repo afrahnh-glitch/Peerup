@@ -1,502 +1,145 @@
-
-:root {
-  /* --- Color: Base space surfaces --- */
-  --pu-void-950: #06071a;         /* أعمق نقطة في الخلفية */
-  --pu-void-900: #0a0c22;         /* الخلفية الأساسية */
-  --pu-night-850: #10122c;        /* كحلي ليلي */
-  --pu-nebula-800: #171638;       /* بنفسجي داكن جدًا */
-  --pu-nebula-700: #201d47;       /* سطح البطاقات الأساسي */
-  --pu-nebula-600: #2a2657;       /* سطح مرتفع / hover */
-  --pu-border-soft: #35315f;      /* حدود ناعمة */
-
-  /* --- Color: Accents (استخدام متزن، ليس Neon بالكامل) --- */
-  --pu-violet-500: #8b6bf2;       /* بنفسجي فضائي أساسي */
-  --pu-violet-400: #a58bf7;
-  --pu-blue-500: #5b8ef7;         /* أزرق سماوي */
-  --pu-cyan-400: #45d8e6;         /* Cyan */
-  --pu-fuchsia-300: #e59fd0;      /* وردي/فوشيا خفيف جدًا — استخدام محدود */
-
-  /* --- Color: Text --- */
-  --pu-text-primary: #eef1fc;     /* أبيض مائل للزرقة */
-  --pu-text-secondary: #b7bce0;
-  --pu-text-muted: #7d81a8;
-  --pu-text-on-accent: #0a0c22;
-
-  /* --- Color: Feedback --- */
-  --pu-success-500: #46c98a;
-  --pu-success-bg: rgba(70, 201, 138, 0.12);
-  --pu-error-500: #f0617a;
-  --pu-error-bg: rgba(240, 97, 122, 0.12);
-  --pu-warning-500: #f2b155;
-  --pu-warning-bg: rgba(242, 177, 85, 0.12);
-  --pu-info-500: var(--pu-cyan-400);
-  --pu-info-bg: rgba(69, 216, 230, 0.1);
-
-  /* --- Gradients --- */
-  --pu-gradient-primary: linear-gradient(90deg, var(--pu-violet-500) 0%, var(--pu-blue-500) 55%, var(--pu-cyan-400) 100%);
-  --pu-gradient-primary-soft: linear-gradient(90deg, rgba(139,107,242,0.85) 0%, rgba(91,142,247,0.85) 55%, rgba(69,216,230,0.85) 100%);
-  --pu-gradient-nebula-bg: radial-gradient(60% 50% at 80% 0%, rgba(139,107,242,0.16) 0%, rgba(10,12,34,0) 60%),
-                            radial-gradient(50% 40% at 10% 100%, rgba(69,216,230,0.10) 0%, rgba(10,12,34,0) 60%),
-                            linear-gradient(180deg, var(--pu-void-950) 0%, var(--pu-night-850) 60%, var(--pu-void-900) 100%);
-  --pu-glow-violet: 0 0 24px rgba(139, 107, 242, 0.35);
-  --pu-glow-cyan: 0 0 24px rgba(69, 216, 230, 0.3);
-
-  /* --- Typography --- */
-  --pu-font-base: 'Tajawal', 'Segoe UI', Tahoma, sans-serif;
-  --pu-fs-page-title: 1.75rem;    /* 28px */
-  --pu-fs-section-title: 1.25rem;/* 20px */
-  --pu-fs-card-title: 1.05rem;   /* ~17px */
-  --pu-fs-body: 0.95rem;         /* ~15px */
-  --pu-fs-caption: 0.8rem;       /* ~13px */
-  --pu-fs-label: 0.8rem;
-  --pu-fs-button: 0.95rem;
-  --pu-lh-tight: 1.3;
-  --pu-lh-normal: 1.6;
-  --pu-lh-loose: 1.8;
-  --pu-fw-regular: 400;
-  --pu-fw-medium: 500;
-  --pu-fw-bold: 700;
-  --pu-fw-extrabold: 800;
-
-  /* --- Spacing scale --- */
-  --pu-space-1: 4px;
-  --pu-space-2: 8px;
-  --pu-space-3: 12px;
-  --pu-space-4: 16px;
-  --pu-space-5: 20px;
-  --pu-space-6: 24px;
-  --pu-space-8: 32px;
-  --pu-space-10: 40px;
-  --pu-space-12: 48px;
-  --pu-space-16: 64px;
-
-  /* --- Radius --- */
-  --pu-radius-sm: 8px;
-  --pu-radius-md: 14px;
-  --pu-radius-lg: 20px;
-  --pu-radius-xl: 28px;
-  --pu-radius-pill: 999px;
-
-  /* --- Shadows --- */
-  --pu-shadow-sm: 0 2px 8px rgba(4, 5, 16, 0.35);
-  --pu-shadow-md: 0 8px 24px rgba(4, 5, 16, 0.45);
-  --pu-shadow-lg: 0 16px 40px rgba(4, 5, 16, 0.55);
-  --pu-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-
-  /* --- Transitions --- */
-  --pu-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --pu-duration-fast: 150ms;
-  --pu-duration-base: 200ms;
-  --pu-duration-slow: 300ms;
-  /* --- Z-index scale --- */
-  --pu-z-base: 0;
-  --pu-z-card: 10;
-  --pu-z-sticky: 100;
-  --pu-z-nav: 200;
-  --pu-z-overlay: 300;
-  --pu-z-modal: 400;
-  --pu-z-toast: 500;
-
-  /* --- Touch targets --- */
-  --pu-touch-min: 44px;
+:root{
+  --shell-w: 440px;
+  --ink: #E9E6FA;
+  --ink-soft: #A9A2C9;
+  --ink-faint: #756E97;
+  --bg-page: #0A0716;
+  --bg: #0E0B21;
+  --surface: rgba(255,255,255,.05);
+  --border: rgba(167,159,255,.16);
+  --primary: #7C5CFC;
+  --primary-soft: rgba(124,92,252,.16);
+  --skyblue: #35C7E8;
+  --skyblue-soft: rgba(53,199,232,.14);
+  --coral: #E85D9E;
+  --coral-soft: rgba(232,93,158,.14);
+  --danger: #F0685E;
+  --danger-soft: rgba(240,104,94,.14);
+  --radius-md: 16px;
+  --shadow-soft: 0 10px 32px -14px rgba(0,0,0,.6);
+  --glow-primary: 0 0 0 1px rgba(124,92,252,.35), 0 8px 24px -10px rgba(124,92,252,.55);
 }
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(600px 380px at 12% -6%, rgba(124,92,252,.22), transparent 60%),
+    radial-gradient(520px 420px at 108% 14%, rgba(53,199,232,.16), transparent 60%),
+    radial-gradient(420px 320px at 50% 110%, rgba(232,93,158,.10), transparent 60%),
+    var(--bg-page);
+  color:var(--ink); min-height:100vh;
+  font-family:'Tajawal',-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;
+}
+h1,h2,h3{font-family:'El Messiri','Tajawal',sans-serif;}
+button{font-family:inherit; cursor:pointer;}
+input{font-family:inherit;}
+@media(min-width:700px){body{padding:24px 0;}}
+.shell{
+  max-width:var(--shell-w); margin:0 auto; min-height:100vh; display:flex; flex-direction:column;
+  position:relative; isolation:isolate;
+  background:
+    radial-gradient(1.5px 1.5px at 20% 18%, rgba(255,255,255,.85), transparent 60%),
+    radial-gradient(1.5px 1.5px at 76% 8%, rgba(255,255,255,.6), transparent 60%),
+    radial-gradient(1px 1px at 42% 32%, rgba(255,255,255,.7), transparent 60%),
+    radial-gradient(1.5px 1.5px at 88% 46%, rgba(255,255,255,.55), transparent 60%),
+    radial-gradient(1px 1px at 8% 62%, rgba(255,255,255,.6), transparent 60%),
+    radial-gradient(1.5px 1.5px at 62% 78%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1px 1px at 30% 92%, rgba(255,255,255,.55), transparent 60%),
+    var(--bg);
+}
+@media(min-width:700px){.shell{min-height:calc(100vh - 48px); border-radius:26px; overflow:hidden; box-shadow:var(--shadow-soft); border:1px solid var(--border);}}
 
-/* Light-surface tokens: تُستخدم فقط إذا كانت مناطق فاتحة موجودة أصلًا في الواجهة.
-   لا تغيّر بنية الصفحة — فقط أضف الكلاس .pu-surface-light على العنصر الموجود. */
-.pu-surface-light {
-  --pu-void-950: #f5f6fb;
-  --pu-void-900: #ffffff;
-  --pu-night-850: #eef0fa;
-  --pu-nebula-800: #ffffff;
-  --pu-nebula-700: #ffffff;
-  --pu-nebula-600: #f1f2fb;
-  --pu-border-soft: #dfe1f2;
-  --pu-text-primary: #171a33;
-  --pu-text-secondary: #4b4f72;
-  --pu-text-muted: #8083a3;
-  --pu-shadow-sm: 0 2px 8px rgba(23, 26, 51, 0.06);
-  --pu-shadow-md: 0 8px 24px rgba(23, 26, 51, 0.08);
-  --pu-shadow-lg: 0 16px 40px rgba(23, 26, 51, 0.12);
-}
+.content{flex:1; padding:28px 22px; animation:fadeSlide .25s ease;}
+@keyframes fadeSlide{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);}}
 
-/* --------------------------------------------------------------------------
-   2) BASE / RESET (خفيف — لا يفرض بنية جديدة)
-   -------------------------------------------------------------------------- */
-.pu-root, .pu-app {
-  direction: rtl;
-  font-family: var(--pu-font-base);
-  color: var(--pu-text-primary);
-  background: var(--pu-void-900);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
+.brand-center{text-align:center; margin-bottom:8px;}
+.brand-mark{width:56px; height:56px; border-radius:16px; background:linear-gradient(135deg, var(--primary), var(--skyblue)); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'El Messiri'; font-weight:700; font-size:24px; margin:0 auto 12px; box-shadow:var(--glow-primary);}
+.brand-center .bname{font-family:'El Messiri'; font-weight:700; font-size:24px; color:var(--ink);}
+.brand-center .tag{font-size:13px; color:var(--ink-soft); margin-top:2px;}
+.brand-center .slogan{font-size:12.5px; color:var(--ink-faint); margin-top:10px; line-height:1.6;}
 
-.pu-root *, .pu-app * {
-  box-sizing: border-box;
-}
+.back-btn{width:36px; height:36px; border-radius:50%; border:1px solid var(--border); background:var(--surface); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; color:var(--ink); margin-bottom:18px; transition:background .2s ease, border-color .2s ease;}
+.back-btn:hover{background:rgba(255,255,255,.09); border-color:rgba(167,159,255,.3);}
 
-.pu-root a { color: inherit; text-decoration: none; }
+.role-card{display:flex; align-items:center; gap:14px; width:100%; background:var(--surface); backdrop-filter:blur(10px); border:1px solid var(--border); border-radius:18px; padding:18px; margin-bottom:14px; text-align:right; box-shadow:var(--shadow-soft); transition:border-color .2s ease, transform .2s ease, background .2s ease;}
+.role-card:hover{border-color:rgba(124,92,252,.4); background:rgba(255,255,255,.07); transform:translateY(-1px);}
+.role-card .badge{width:50px; height:50px; border-radius:15px; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0;}
+.role-card .r-title{font-weight:800; font-size:16px; margin-bottom:2px; color:var(--ink);}
+.role-card .r-sub{font-size:12.3px; color:var(--ink-soft);}
 
-.pu-root ::selection {
-  background: rgba(139, 107, 242, 0.35);
-  color: var(--pu-text-primary);
-}
+.tabs{display:flex; background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:14px; padding:4px; margin-bottom:22px;}
+.tab{flex:1; border:none; background:none; padding:10px; border-radius:11px; font-weight:700; font-size:13.5px; color:var(--ink-soft); transition:background .2s ease, color .2s ease;}
+.tab.active{background:linear-gradient(135deg, var(--primary), var(--skyblue)); color:#fff; box-shadow:0 6px 16px -8px rgba(124,92,252,.6);}
 
-.pu-root ::-webkit-scrollbar { width: 8px; height: 8px; }
-.pu-root ::-webkit-scrollbar-track { background: transparent; }
-.pu-root ::-webkit-scrollbar-thumb {
-  background: var(--pu-border-soft);
-  border-radius: var(--pu-radius-pill);
-}
+.field{margin-bottom:15px;}
+.field label{display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--ink);}
+.field input{width:100%; border:1.5px solid var(--border); border-radius:12px; padding:12px 13px; font-size:14px; background:rgba(255,255,255,.04); color:var(--ink); transition:border-color .2s ease, box-shadow .2s ease;}
+.field input::placeholder{color:var(--ink-faint);}
+.field input:focus{outline:none; border-color:var(--skyblue); box-shadow:0 0 0 3px rgba(53,199,232,.18);}
+.field .hint{font-size:11.5px; color:var(--ink-faint); margin-top:5px;}
 
-/* --------------------------------------------------------------------------
-   3) SPACE BACKGROUND UTILITIES
-   -------------------------------------------------------------------------- */
+.btn{border:none; border-radius:14px; padding:13px 16px; font-weight:700; font-size:14.5px; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; transition:transform .15s ease, box-shadow .2s ease, opacity .2s ease;}
+.btn:active{transform:scale(.98);}
+.btn:disabled{opacity:.5; cursor:not-allowed;}
+.btn:focus-visible{outline:2px solid var(--skyblue); outline-offset:2px;}
+.btn-primary{background:linear-gradient(135deg, var(--primary) 0%, var(--skyblue) 100%); color:#fff; box-shadow:var(--glow-primary);}
+.btn-primary:hover{box-shadow:0 10px 26px -10px rgba(124,92,252,.7);}
+.btn-coral{background:linear-gradient(135deg, var(--coral) 0%, var(--primary) 100%); color:#fff; box-shadow:0 8px 22px -10px rgba(232,93,158,.55);}
+.btn-coral:hover{box-shadow:0 10px 26px -10px rgba(232,93,158,.7);}
 
-/* الخلفية الأساسية: تدرجات Nebula ناعمة + نجوم CSS بحتة (بدون صور) */
-.pu-bg-space {
-  position: relative;
-  background: var(--pu-gradient-nebula-bg);
-  background-color: var(--pu-void-900);
-  isolation: isolate;
-  overflow: hidden;
-}
+.alert{border-radius:12px; padding:11px 13px; font-size:12.8px; margin-bottom:16px; line-height:1.6; border:1px solid transparent;}
+.alert.error{background:var(--danger-soft); color:#FFB4AD; border-color:rgba(240,104,94,.3);}
+.alert.success{background:var(--skyblue-soft); color:#9FE8F7; border-color:rgba(53,199,232,.3);}
 
-/* طبقة النجوم: تُبنى بثلاث طبقات radial-gradient متكررة بأحجام مختلفة.
-   خفيفة جدًا ومتباعدة — ليست مزدحمة. */
-.pu-bg-space::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    radial-gradient(1px 1px at 10% 20%, rgba(238,241,252,0.55) 50%, transparent 51%),
-    radial-gradient(1px 1px at 80% 12%, rgba(238,241,252,0.4) 50%, transparent 51%),
-    radial-gradient(1.5px 1.5px at 35% 65%, rgba(238,241,252,0.5) 50%, transparent 51%),
-    radial-gradient(1px 1px at 60% 80%, rgba(238,241,252,0.35) 50%, transparent 51%),
-    radial-gradient(1px 1px at 90% 55%, rgba(238,241,252,0.4) 50%, transparent 51%),
-    radial-gradient(1.5px 1.5px at 20% 90%, rgba(238,241,252,0.3) 50%, transparent 51%),
-    radial-gradient(1px 1px at 50% 35%, rgba(238,241,252,0.45) 50%, transparent 51%);
-  background-repeat: repeat;
-  background-size: 340px 340px;
-  opacity: 0.6;
-}
+.dash-header{text-align:center; padding:10px 0 20px;}
+.dash-avatar{width:64px; height:64px; border-radius:50%; background:var(--primary-soft); border:1px solid var(--border); color:var(--ink); display:flex; align-items:center; justify-content:center; font-family:'El Messiri'; font-weight:700; font-size:24px; margin:0 auto 12px;}
+.role-chip{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; padding:6px 13px; border-radius:999px; margin-top:6px; border:1px solid transparent;}
+.role-chip.student{background:var(--skyblue-soft); color:#9FE8F7; border-color:rgba(53,199,232,.3);}
+.role-chip.teacher{background:var(--primary-soft); color:#C9B8FF; border-color:rgba(124,92,252,.3);}
+.info-card{background:var(--surface); backdrop-filter:blur(10px); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px; margin-top:18px; font-size:13px; color:var(--ink-soft); line-height:1.8;}
+.link-btn{background:none; border:none; color:var(--ink-faint); font-size:12.5px; text-decoration:underline; display:block; text-align:center; margin:18px auto 0;}
+.link-btn:hover{color:var(--skyblue);}
 
-/* طبقة توهج Nebula إضافية خلف المحتوى مباشرة */
-.pu-bg-space::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: radial-gradient(45% 35% at 85% 8%, rgba(139,107,242,0.14), transparent 60%),
-              radial-gradient(40% 30% at 5% 95%, rgba(69,216,230,0.10), transparent 60%);
-}
+/* ---------- app shell (post-login pages) ---------- */
+.content-app{flex:1; padding:18px 18px 100px; animation:fadeSlide .25s ease;}
+.content-home{flex:1; padding:0 0 100px; animation:fadeSlide .25s ease;}
 
-.pu-bg-space > * { position: relative; z-index: 1; }
+.hero{background:linear-gradient(135deg, rgba(124,92,252,.22) 0%, rgba(53,199,232,.14) 100%); border-bottom:1px solid var(--border); border-radius:0 0 30px 30px; padding:22px 20px 24px; margin-bottom:20px; position:relative; overflow:hidden;}
+.hero-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+.hero .brand-mini{display:flex; align-items:center; gap:9px;}
+.hero .brand-mini .bm-mark{width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg, var(--primary), var(--skyblue)); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'El Messiri'; font-weight:700; font-size:14px;}
+.hero .brand-mini .bm-name{font-family:'El Messiri'; font-weight:700; font-size:15px; color:var(--ink);}
+.hero h1{margin:0 0 5px; font-size:20px; font-weight:700; color:var(--ink);}
+.hero p.sub{margin:0; color:var(--ink-soft); font-size:13.5px;}
+.hero-avatar{width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,.08); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; font-size:16px; border:1px solid var(--border);}
 
-/* توهج محيطي خفيف حول عنصر مهم (استخدم بحرص، ليس على كل شيء) */
-.pu-glow-accent {
-  box-shadow: var(--pu-glow-violet);
-}
-.pu-glow-cyan {
-  box-shadow: var(--pu-glow-cyan);
-}
+.page-head{display:flex; align-items:center; gap:10px; padding:6px 2px 18px;}
+.page-head h2{margin:0; font-size:18px; font-weight:700; color:var(--ink);}
+.page-head .p-sub{font-size:12px; color:var(--ink-soft); margin-top:1px;}
 
-/* خط مداري بسيط — للاستخدام كفاصل بصري أو خلف Avatar/تقدم */
-.pu-orbit-divider {
-  position: relative;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--pu-border-soft) 20%, var(--pu-border-soft) 80%, transparent);
-  margin: var(--pu-space-6) 0;
-}
-/* نقطة ضوئية صغيرة (indicator) — لإشارات حالة/تعاون خفيفة */
-.pu-dot-glow {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--pu-cyan-400);
-  box-shadow: 0 0 8px rgba(69, 216, 230, 0.7);
-}
+.section-title{margin:22px 0 12px; font-size:15px; font-weight:700; color:var(--ink);}
+.subject-tag{display:inline-flex; align-items:center; gap:6px; background:var(--primary-soft); border:1px solid rgba(124,92,252,.3); color:#C9B8FF; font-weight:700; font-size:13px; padding:8px 14px; border-radius:12px; margin-bottom:14px;}
 
-/* --------------------------------------------------------------------------
-   4) TYPOGRAPHY
-   -------------------------------------------------------------------------- */
-.pu-text-page-title {
-  font-size: var(--pu-fs-page-title);
-  font-weight: var(--pu-fw-extrabold);
-  line-height: var(--pu-lh-tight);
-  color: var(--pu-text-primary);
-  margin: 0 0 var(--pu-space-2);
-}
+.role-card .chev{margin-inline-start:auto; color:var(--ink-faint); flex-shrink:0;}
+.role-card.disabled{opacity:.5;}
+.role-card.disabled:hover{transform:none; border-color:var(--border); background:var(--surface);}
 
-.pu-text-section-title {
-  font-size: var(--pu-fs-section-title);
-  font-weight: var(--pu-fw-bold);
-  line-height: var(--pu-lh-tight);
-  color: var(--pu-text-primary);
-  margin: 0 0 var(--pu-space-2);
-}
+.list-row{display:flex; align-items:center; gap:12px; padding:14px 4px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .2s ease;}
+.list-row:hover{background:rgba(255,255,255,.03);}
+.list-row:last-child{border-bottom:none;}
+.list-row .r-title{font-weight:700; font-size:14.5px; margin-bottom:2px; color:var(--ink);}
+.list-row .r-meta{font-size:12px; color:var(--ink-soft);}
+.list-row .chev{margin-inline-start:auto; color:var(--ink-faint); flex-shrink:0;}
+.badge.sm{width:36px; height:36px; border-radius:11px; font-size:16px;}
 
-.pu-text-card-title {
-  font-size: var(--pu-fs-card-title);
-  font-weight: var(--pu-fw-bold);
-  line-height: var(--pu-lh-tight);
-  color: var(--pu-text-primary);
-  margin: 0 0 var(--pu-space-1);
-}
+.empty-state{text-align:center; padding:28px 14px; color:var(--ink-soft); border:1.5px dashed var(--border); border-radius:16px; font-size:13.3px; line-height:1.7;}
+.empty-state .emoji{font-size:26px; display:block; margin-bottom:8px;}
 
-.pu-text-body {
-  font-size: var(--pu-fs-body);
-  font-weight: var(--pu-fw-regular);
-  line-height: var(--pu-lh-normal);
-  color: var(--pu-text-secondary);
-}
+.toast{position:fixed; bottom:96px; left:50%; transform:translateX(-50%); max-width:calc(var(--shell-w) - 40px); background:rgba(20,15,40,.92); backdrop-filter:blur(12px); color:#fff; padding:12px 18px; border-radius:14px; font-size:12.8px; font-weight:500; z-index:80; border:1px solid var(--border); box-shadow:0 14px 34px -12px rgba(0,0,0,.6);}
 
-.pu-text-caption {
-  font-size: var(--pu-fs-caption);
-  font-weight: var(--pu-fw-regular);
-  line-height: var(--pu-lh-normal);
-  color: var(--pu-text-muted);
-}
-
-.pu-text-label {
-  font-size: var(--pu-fs-label);
-  font-weight: var(--pu-fw-medium);
-  color: var(--pu-text-secondary);
-  display: inline-block;
-  margin-bottom: var(--pu-space-1);
-}
-
-.pu-text-gradient {
-  background: var(--pu-gradient-primary);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-/* --------------------------------------------------------------------------
-   5) CARDS
-   -------------------------------------------------------------------------- */
-.pu-card {
-  position: relative;
-  background: var(--pu-nebula-700);
-  background-image: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
-  border: 1px solid var(--pu-border-soft);
-  border-radius: var(--pu-radius-lg);
-  padding: var(--pu-space-5);
-  box-shadow: var(--pu-shadow-md), var(--pu-shadow-inset);
-  transition: transform var(--pu-duration-base) var(--pu-ease),
-              border-color var(--pu-duration-base) var(--pu-ease),
-              box-shadow var(--pu-duration-base) var(--pu-ease);
-}
-
-/* Glassmorphism خفيف — للاستخدام فوق الخلفية الفضائية مباشرة */
-.pu-card--glass {
-  background: rgba(32, 29, 71, 0.5);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-}
-
-.pu-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(139, 107, 242, 0.4);
-  box-shadow: var(--pu-shadow-lg), var(--pu-glow-violet);
-}
-
-.pu-card--selected,
-.pu-card[aria-selected="true"] {
-  border-color: var(--pu-violet-400);
-  box-shadow: var(--pu-glow-violet), var(--pu-shadow-md);
-}
-.pu-card--selected::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: 0;
-  top: var(--pu-space-3);
-  bottom: var(--pu-space-3);
-  width: 3px;
-  border-radius: var(--pu-radius-pill);
-  background: var(--pu-gradient-primary);
-}
-
-.pu-card--flat {
-  box-shadow: none;
-  background: var(--pu-nebula-800);
-}
-
-.pu-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--pu-space-3);
-  margin-bottom: var(--pu-space-3);
-}
-
-.pu-card__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--pu-space-3);
-  margin-top: var(--pu-space-4);
-  padding-top: var(--pu-space-3);
-  border-top: 1px solid var(--pu-border-soft);
-}
-
-/* --------------------------------------------------------------------------
-   6) BUTTONS
-   -------------------------------------------------------------------------- */
-.pu-btn {
-  display: inline-flex;
-  align-items: center;
-  .pu-field__hint {
-  display: block;
-  margin-top: var(--pu-space-1);
-  font-size: var(--pu-fs-caption);
-  color: var(--pu-text-muted);
-}
-.pu-field__hint--error { color: var(--pu-error-500); }
-.pu-field__hint--success { color: var(--pu-success-500); }
-
-/* Search — حقل بحث بأيقونة داخل الحقل (RTL: الأيقونة يمين الحقل) */
-.pu-search {
-  position: relative;
-}
-.pu-search .pu-input {
-  padding-inline-end: var(--pu-space-10);
-}
-.pu-search__icon {
-  position: absolute;
-  inset-inline-end: var(--pu-space-3);
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--pu-text-muted);
-  pointer-events: none;
-}
-
-/* Select — سهم مخصص متوافق مع RTL (يظهر على يسار الحقل) */
-.pu-select {
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--pu-text-secondary) 50%),
-                     linear-gradient(135deg, var(--pu-text-secondary) 50%, transparent 50%);
-  background-position: calc(var(--pu-space-4) + 5px) calc(50% - 2px),
-                        calc(var(--pu-space-4)) calc(50% - 2px);
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  padding-inline-start: var(--pu-space-8);
-}
-
-/* Checkbox / Radio */
-.pu-checkbox,
-.pu-radio {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pu-space-2);
-  cursor: pointer;
-  font-size: var(--pu-fs-body);
-  color: var(--pu-text-secondary);
-}
-
-.pu-checkbox input,
-.pu-radio input {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  border: 1.5px solid var(--pu-border-soft);
-  background: var(--pu-nebula-800);
-  display: inline-grid;
-  place-content: center;
-  cursor: pointer;
-  transition: border-color var(--pu-duration-fast) var(--pu-ease),
-              background var(--pu-duration-fast) var(--pu-ease);
-}
-.pu-checkbox input { border-radius: 6px; }
-.pu-radio input { border-radius: 50%; }
-
-.pu-checkbox input::before,
-.pu-radio input::before {
-  content: "";
-  width: 10px;
-  height: 10px;
-  transform: scale(0);
-  transition: transform var(--pu-duration-fast) var(--pu-ease);
-  box-shadow: inset 1em 1em currentColor;
-}
-.pu-checkbox input::before { border-radius: 2px; background: var(--pu-gradient-primary); }
-.pu-radio input::before { border-radius: 50%; background: var(--pu-gradient-primary); }
-
-.pu-checkbox input:checked,
-.pu-radio input:checked { border-color: var(--pu-violet-400); }
-.pu-checkbox input:checked::before,
-.pu-radio input:checked::before { transform: scale(1); }
-
-.pu-checkbox input:focus-visible,
-.pu-radio input:focus-visible {
-  outline: 2px solid var(--pu-cyan-400);
-  outline-offset: 2px;
-}
-
-/* Toggle */
-.pu-toggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  width: 44px;
-  height: 26px;
-}
-.pu-toggle input {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  border-radius: var(--pu-radius-pill);
-  background: var(--pu-nebula-600);
-  border: 1px solid var(--pu-border-soft);
-  cursor: pointer;
-  transition: background var(--pu-duration-base) var(--pu-ease);
-  position: relative;
-}
-.pu-toggle input::before {
-  content: "";
-  position: absolute;
-  top: 2px;
-  inset-inline-start: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--pu-text-primary);
-  transition: inset-inline-start var(--pu-duration-base) var(--pu-ease);
-}
-.pu-toggle input:checked {
-  background: var(--pu-gradient-primary);
-  border-color: transparent;
-}
-.pu-toggle input:checked::before {
-  inset-inline-start: calc(100% - 21px);
-  background: #06071a;
-}
-.pu-toggle input:focus-visible { outline: 2px solid var(--pu-cyan-400); outline-offset: 2px; }
-.pu-toggle input:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* --------------------------------------------------------------------------
-   8) NAVIGATION (قابل للتطبيق على Sidebar / Top nav / Bottom nav)
-  -------------------------------------------------------------------------- */
-.pu-nav {
-  background: rgba(16, 18, 44, 0.85);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  border-color: var(--pu-border-soft);
-  z-index: var(--pu-z-nav);
-}
-
-/* استخدم كأي اتجاه: أضف الكلاس الفرعي المناسب حسب نوع الـ Navigation الموجود */
-.pu-nav--top {
-  border-bottom: 1px solid var(--pu-border-soft);
-}
-.pu-n 
+/* bottom nav */
+.bottomnav{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:var(--shell-w); background:rgba(14,11,33,.88); backdrop-filter:blur(14px); border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-around; padding:8px 6px calc(8px + env(safe-area-inset-bottom)); z-index:60;}
+.navitem{display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; color:var(--ink-faint); font-size:10px; font-weight:700; padding:4px 6px; transition:color .2s ease;}
+.navitem.active{color:var(--skyblue);}
+.navitem .ic-wrap{height:20px; display:flex; align-items:center; font-size:18px;}
+.nav-raised{width:46px; height:46px; border-radius:50%; background:linear-gradient(135deg, var(--coral), var(--primary)); color:#fff; display:flex; align-items:center; justify-content:center; margin-top:-22px; box-shadow:0 10px 26px -8px rgba(232,93,158,.6); border:4px solid var(--bg); font-size:18px;}
