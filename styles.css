@@ -1,115 +1,19 @@
-:root{
-  --shell-w: 440px;
-  --ink: #2B2438;
-  --ink-soft: #736C82;
-  --ink-faint: #A79FB3;
-  --bg-page: #ECE8F1;
-  --bg: #FBF9F4;
-  --surface: #FFFFFF;
-  --border: #EEE7E0;
-  --primary: #5A4B9E;
-  --primary-soft: #EEEAFA;
-  --skyblue: #4E7FA8;
-  --skyblue-soft: #E5F0F7;
-  --coral: #F0684B;
-  --coral-soft: #FDE9E3;
-  --danger: #C6553D;
-  --danger-soft: #FBEAE4;
-  --radius-md: 16px;
-  --shadow-soft: 0 10px 28px -14px rgba(43,36,56,.28);
+/* موارد التعلم */
+.resources-row { display: flex; gap: var(--space-3); margin: 0 var(--space-4) var(--space-5); overflow-x: auto; scrollbar-width: none; }
+.resources-row::-webkit-scrollbar { display: none; }
+.resource-card { flex: 0 0 96px; height: 128px; border-radius: var(--radius-md); display: flex; flex-direction: column; justify-content: flex-end; padding: var(--space-3); color: var(--text-inverse); font-size: 11.5px; font-weight: 700; box-shadow: var(--shadow-card); }
+.resource-card--tests { background: linear-gradient(160deg, #7C9CF7, #5B7CE8); }
+.resource-card--laws { background: linear-gradient(160deg, #B79CF5, #9B7CE8); }
+.resource-card--summaries { background: linear-gradient(160deg, #6FCBA3, #4CAF8C); }
+.resource-card--videos { background: linear-gradient(160deg, #F5A96F, #F0895B); }
+
+/* شريط التنقل السفلي */
+.bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: var(--bg-base); border-top: 1px solid var(--border-hairline); display: flex; align-items: center; justify-content: space-around; padding: var(--space-2) var(--space-4); padding-bottom: max(var(--space-2), env(safe-area-inset-bottom, 0px)); box-shadow: 0 -4px 16px rgba(30, 39, 73, 0.05); }
+.nav-icon { color: var(--brand-purple-dark); opacity: 0.55; width: 24px; height: 24px; }
+.nav-icon.active { opacity: 1; }
+.nav-fab { width: 52px; height: 52px; border-radius: 50%; background: var(--brand-purple); color: var(--text-inverse); display: flex; align-items: center; justify-content: center; font-size: 26px; margin-top: -28px; box-shadow: 0 6px 16px rgba(155, 135, 245, 0.45); }
+
+@media (max-width: 360px) {
+  .service-grid { grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+  .hero-card h2 { font-size: 15px; }
 }
-*{box-sizing:border-box;}
-html,body{margin:0;padding:0;}
-body{
-  background:var(--bg-page); color:var(--ink); min-height:100vh;
-  font-family:'Tajawal',-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;
-}
-h1,h2,h3{font-family:'El Messiri','Tajawal',sans-serif;}
-button{font-family:inherit; cursor:pointer;}
-input{font-family:inherit;}
-@media(min-width:700px){body{padding:24px 0;}}
-.shell{max-width:var(--shell-w); margin:0 auto; background:var(--bg); min-height:100vh; display:flex; flex-direction:column;}
-@media(min-width:700px){.shell{min-height:calc(100vh - 48px); border-radius:26px; overflow:hidden; box-shadow:var(--shadow-soft); border:1px solid var(--border);}}
-
-.content{flex:1; padding:28px 22px; animation:fadeSlide .25s ease;}
-@keyframes fadeSlide{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);}}
-
-.brand-center{text-align:center; margin-bottom:8px;}
-.brand-mark{width:56px; height:56px; border-radius:16px; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'El Messiri'; font-weight:700; font-size:24px; margin:0 auto 12px;}
-.brand-center .bname{font-family:'El Messiri'; font-weight:700; font-size:24px;}
-.brand-center .tag{font-size:13px; color:var(--ink-soft); margin-top:2px;}
-.brand-center .slogan{font-size:12.5px; color:var(--ink-faint); margin-top:10px; line-height:1.6;}
-
-.back-btn{width:36px; height:36px; border-radius:50%; border:1px solid var(--border); background:var(--surface); display:flex; align-items:center; justify-content:center; color:var(--ink); margin-bottom:18px;}
-
-.role-card{display:flex; align-items:center; gap:14px; width:100%; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:18px; margin-bottom:14px; text-align:right; box-shadow:0 6px 18px -12px rgba(43,36,56,.18);}
-.role-card .badge{width:50px; height:50px; border-radius:15px; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0;}
-.role-card .r-title{font-weight:800; font-size:16px; margin-bottom:2px;}
-.role-card .r-sub{font-size:12.3px; color:var(--ink-soft);}
-
-.tabs{display:flex; background:var(--primary-soft); border-radius:14px; padding:4px; margin-bottom:22px;}
-.tab{flex:1; border:none; background:none; padding:10px; border-radius:11px; font-weight:700; font-size:13.5px; color:var(--ink-soft);}
-.tab.active{background:var(--surface); color:var(--primary); box-shadow:0 4px 10px -6px rgba(43,36,56,.25);}
-
-.field{margin-bottom:15px;}
-.field label{display:block; font-size:13px; font-weight:700; margin-bottom:6px;}
-.field input{width:100%; border:1.5px solid var(--border); border-radius:12px; padding:12px 13px; font-size:14px; background:var(--surface); color:var(--ink);}
-.field .hint{font-size:11.5px; color:var(--ink-faint); margin-top:5px;}
-
-.btn{border:none; border-radius:14px; padding:13px 16px; font-weight:700; font-size:14.5px; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;}
-.btn-primary{background:var(--primary); color:#fff;}
-.btn-coral{background:var(--coral); color:#fff;}
-
-.alert{border-radius:12px; padding:11px 13px; font-size:12.8px; margin-bottom:16px; line-height:1.6;}
-.alert.error{background:var(--danger-soft); color:var(--danger);}
-.alert.success{background:var(--skyblue-soft); color:#2B5877;}
-
-.dash-header{text-align:center; padding:10px 0 20px;}
-.dash-avatar{width:64px; height:64px; border-radius:50%; background:var(--primary-soft); color:var(--primary); display:flex; align-items:center; justify-content:center; font-family:'El Messiri'; font-weight:700; font-size:24px; margin:0 auto 12px;}
-.role-chip{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; padding:6px 13px; border-radius:999px; margin-top:6px;}
-.role-chip.student{background:var(--skyblue-soft); color:#2B5877;}
-.role-chip.teacher{background:var(--primary-soft); color:var(--primary);}
-.info-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px; margin-top:18px; font-size:13px; color:var(--ink-soft); line-height:1.8;}
-.link-btn{background:none; border:none; color:var(--ink-faint); font-size:12.5px; text-decoration:underline; display:block; text-align:center; margin:18px auto 0;}
-
-/* ---------- app shell (post-login pages) ---------- */
-.content-app{flex:1; padding:18px 18px 100px; animation:fadeSlide .25s ease;}
-.content-home{flex:1; padding:0 0 100px; animation:fadeSlide .25s ease;}
-
-.hero{background:linear-gradient(135deg, var(--primary-soft) 0%, var(--skyblue-soft) 100%); border-radius:0 0 30px 30px; padding:22px 20px 24px; margin-bottom:20px;}
-.hero-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
-.hero .brand-mini{display:flex; align-items:center; gap:9px;}
-.hero .brand-mini .bm-mark{width:32px; height:32px; border-radius:10px; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'El Messiri'; font-weight:700; font-size:14px;}
-.hero .brand-mini .bm-name{font-family:'El Messiri'; font-weight:700; font-size:15px;}
-.hero h1{margin:0 0 5px; font-size:20px; font-weight:700;}
-.hero p.sub{margin:0; color:var(--ink-soft); font-size:13.5px;}
-.hero-avatar{width:38px; height:38px; border-radius:50%; background:var(--surface); display:flex; align-items:center; justify-content:center; font-size:16px; border:1px solid rgba(255,255,255,.7);}
-
-.page-head{display:flex; align-items:center; gap:10px; padding:6px 2px 18px;}
-.page-head h2{margin:0; font-size:18px; font-weight:700;}
-.page-head .p-sub{font-size:12px; color:var(--ink-soft); margin-top:1px;}
-
-.section-title{margin:22px 0 12px; font-size:15px; font-weight:700;}
-.subject-tag{display:inline-flex; align-items:center; gap:6px; background:var(--primary-soft); color:var(--primary); font-weight:700; font-size:13px; padding:8px 14px; border-radius:12px; margin-bottom:14px;}
-
-.role-card .chev{margin-inline-start:auto; color:var(--ink-faint); flex-shrink:0;}
-.role-card.disabled{opacity:.55;}
-
-.list-row{display:flex; align-items:center; gap:12px; padding:14px 4px; border-bottom:1px solid var(--border); cursor:pointer;}
-.list-row:last-child{border-bottom:none;}
-.list-row .r-title{font-weight:700; font-size:14.5px; margin-bottom:2px;}
-.list-row .r-meta{font-size:12px; color:var(--ink-soft);}
-.list-row .chev{margin-inline-start:auto; color:var(--ink-faint); flex-shrink:0;}
-.badge.sm{width:36px; height:36px; border-radius:11px; font-size:16px;}
-
-.empty-state{text-align:center; padding:28px 14px; color:var(--ink-soft); border:1.5px dashed var(--border); border-radius:16px; font-size:13.3px; line-height:1.7;}
-.empty-state .emoji{font-size:26px; display:block; margin-bottom:8px;}
-
-.toast{position:fixed; bottom:96px; left:50%; transform:translateX(-50%); max-width:calc(var(--shell-w) - 40px); background:var(--ink); color:#fff; padding:12px 18px; border-radius:14px; font-size:12.8px; font-weight:500; z-index:80; box-shadow:0 14px 30px -12px rgba(0,0,0,.4);}
-
-/* bottom nav */
-.bottomnav{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:var(--shell-w); background:rgba(251,249,244,.94); backdrop-filter:blur(10px); border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-around; padding:8px 6px calc(8px + env(safe-area-inset-bottom)); z-index:60;}
-.navitem{display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; color:var(--ink-faint); font-size:10px; font-weight:700; padding:4px 6px;}
-.navitem.active{color:var(--primary);}
-.navitem .ic-wrap{height:20px; display:flex; align-items:center; font-size:18px;}
-.nav-raised{width:46px; height:46px; border-radius:50%; background:var(--coral); color:#fff; display:flex; align-items:center; justify-content:center; margin-top:-22px; box-shadow:0 10px 22px -8px rgba(240,104,75,.65); border:4px solid var(--bg); font-size:18px;}
