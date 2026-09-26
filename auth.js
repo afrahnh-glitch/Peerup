@@ -388,12 +388,14 @@ function viewTeacherHome(){
       المواد الحالية: <b>${subjCount}</b> — الدروس: <b>${lessonCount}</b>
       ${subjCount===0 ? `
       <br><br>
-      ما فيه محتوى بعد. اضغطي الزر تحت مرة وحدة بس عشان تُنشئ مادة الفيزياء
-      ودروسها التجريبية الأربعة في قاعدة البيانات.` : `
+      ما فيه محتوى بعد. اضغطي زر "تهيئة/تحديث الدروس الأساسية" تحت عشان تُنشئ
+      مادة الفيزياء ودروسها في قاعدة البيانات.` : `
       <br><br>
-      ✅ المحتوى الأساسي جاهز. لوحة المراجعة والإحصائيات بتُبنى بالمراحل القادمة.`}
+      ✅ المحتوى الأساسي موجود. تقدرين تضغطين "تهيئة/تحديث الدروس الأساسية" في أي وقت
+      لتحديث قائمة الدروس الافتراضية (هذا آمن ولا يحذف مشاركات الطالبات لاحقًا).`}
     </div>
-    ${subjCount===0 ? `<button class="btn btn-primary" style="margin-top:14px;" data-action="seed-content" ${state.loading?'disabled':''}>${state.loading?'جارِ التهيئة...':'➕ تهيئة المحتوى الأساسي'}</button>` : `
+    <button class="btn btn-primary" style="margin-top:14px;" data-action="seed-content" ${state.loading?'disabled':''}>${state.loading?'جارِ التهيئة...':'🔄 تهيئة / تحديث الدروس الأساسية'}</button>
+    ${subjCount>0 ? `
     <div class="section-title">إضافة درس جديد لمادة ${state.subjects[0] ? state.subjects[0].name : ''}</div>
     <form id="addLessonForm">
       <div class="field">
@@ -407,7 +409,7 @@ function viewTeacherHome(){
         <div class="list-row" style="cursor:default;">
           <div><div class="r-title">${l.title}</div></div>
         </div>`).join('')}
-    </div>`}
+    </div>` : ''}
     <button class="link-btn" data-action="logout">تسجيل الخروج</button>
   </div>`;
 }
