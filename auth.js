@@ -6,6 +6,7 @@ import {
 import {
   getFirestore, doc, getDoc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { getStorage } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 import { firebaseConfig } from "./firebase-config.js";
 import {
   fetchSubjects, fetchLessons, fetchLesson, seedInitialContent, addLesson,
@@ -13,6 +14,7 @@ import {
   createAnswer, fetchAnswersForQuestion,
   fetchPendingPosts, approvePost, rejectPost, deletePost,
   attachLikeInfo, likePost, computeStudentPoints, fetchLeaderboard,
+  uploadPostImage,
 } from "./content.js";
 
 const POST_TYPES = {
@@ -25,6 +27,7 @@ const POST_TYPES = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 /* ---------- state ---------- */
 const state = {
@@ -43,6 +46,7 @@ const state = {
   allQuestions: [],
   shareLessonId: '',
   postType: 'quick',
+  uploadingImage: false,
   expandedQuestions: new Set(),
   pendingPosts: [],
   myStats: null,
@@ -51,6 +55,8 @@ const state = {
 };
 
 function setState(patch){ Object.assign(state, patch); render(); }
+
+let selectedImageFile = null; // ملف الصورة المختارة لمشاركة حالية (اختياري)
 
 function showToast(msg){
   const old = document.querySelector('.toast');
@@ -210,8 +216,14 @@ async function handleSubmitPost(){
   const lessonId = document.getElementById('postLesson').value;
   const content = document.getElementById('postContent').value.trim();
   if(!content){ showToast('اكتبي شرحك قبل الإرسال'); return; }
-  setState({loading:true});
+  setState({loading:true, uploadingImage:false});
   try{
+    let imageUrl = null;
+    if(selectedImageFile){
+      setState({loading:true, uploadingImage:true});
+      imageUrl = await uploadPostImage(storage, state.profile.uid, selectedImageFile);
+      setState({loading:true, uploadingImage:false});
+    }
     const lesson = (state.lessons || []).find(l => l.id === lessonId);
     await createPost(db, {
       lessonId,
@@ -221,11 +233,13 @@ async function handleSubmitPost(){
       type: state.postType,
       title: '',
       content,
+      imageUrl,
     });
+    selectedImageFile = null;
     setState({loading:false});
     navigate('shareSuccess');
   }catch(err){
-    setState({loading:false});
+    setState({loading:false, uploadingImage:false});
     showToast('صار خطأ أثناء الإرسال، حاولي مرة أخرى.');
   }
 }
@@ -521,6 +535,7 @@ function postCard(p){
       ${pending ? `<span class="pending-tag">⏳ بانتظار الاعتماد</span>` : ''}
     </div>
     <div class="p-body">${p.content}</div>
+    ${p.imageUrl ? `<img class="post-image" src="${p.imageUrl}" alt="صورة مرفقة بالشرح">` : ''}
     ${!pending ? `
     <div style="margin-top:11px;">
       <button class="pill-btn ${p.likedByMe?'liked':''}" data-action="like-post" data-id="${p.id}" ${p.likedByMe||isMine?'disabled':''}>
@@ -591,7 +606,17 @@ function viewSharePost(){
       <label>اشرحيها بطريقتك</label>
       <textarea id="postContent" placeholder="اكتبي شرحك هنا..."></textarea>
     </div>
-    <button class="btn btn-primary" data-action="submit-post" ${state.loading?'disabled':''}>${state.loading?'جارِ الإرسال...':'إرسال للمعلمة'}</button>
+    <div class="field">
+      <label>إضافة صورة (اختياري)</label>
+      <input type="file" id="postImageInput" accept="image/*" hidden>
+      <div id="postImageArea">
+        <label class="upload-box" for="postImageInput">
+          <span style="font-size:24px;">📷</span>
+          <span>اضغطي لاختيار صورة من جهازك</span>
+        </label>
+      </div>
+    </div>
+    <button class="btn btn-primary" data-action="submit-post" ${state.loading?'disabled':''}>${state.loading?(state.uploadingImage?'جارِ رفع الصورة...':'جارِ الإرسال...'):'إرسال للمعلمة'}</button>
   </div>`;
 }
 
@@ -771,6 +796,25 @@ function render(){
 }
 
 /* ---------- events ---------- */
+document.addEventListener('change', (e) => {
+  if(e.target.id === 'postImageInput'){
+    const file = e.target.files[0];
+    if(!file) return;
+    selectedImageFile = file;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const area = document.getElementById('postImageArea');
+      if(!area) return;
+      area.innerHTML = `
+        <div class="img-preview-wrap">
+          <img src="${ev.target.result}">
+          <button type="button" class="img-remove" data-action="remove-post-image">✕</button>
+        </div>`;
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if(!el) return;
@@ -805,8 +849,19 @@ document.addEventListener('click', (e) => {
     runSeed();
   } else if(action === 'nav-share'){
     state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
+    selectedImageFile = null;
     setState({postType:'quick'});
     navigate('sharePost');
+  } else if(action === 'remove-post-image'){
+    selectedImageFile = null;
+    const area = document.getElementById('postImageArea');
+    if(area){
+      area.innerHTML = `
+        <label class="upload-box" for="postImageInput">
+          <span style="font-size:24px;">📷</span>
+          <span>اضغطي لاختيار صورة من جهازك</span>
+        </label>`;
+    }
   } else if(action === 'nav-ask'){
     state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
     navigate('askQuestion');
