@@ -326,7 +326,8 @@ function pageHead(title, sub){
   return `
   <div class="page-head">
     <button class="back-btn" data-action="back">←</button>
-    <div><h2>${title}</h2>${sub?`<div class="p-sub">${sub}</div>`:''}</div>
+    <div style="flex:1;"><h2>${title}</h2>${sub?`<div class="p-sub">${sub}</div>`:''}</div>
+    <button class="back-btn" data-action="logout" title="تسجيل الخروج">🚪</button>
   </div>`;
 }
 function studentNav(){
