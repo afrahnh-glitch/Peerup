@@ -7,7 +7,17 @@ import {
   getFirestore, doc, getDoc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { fetchSubjects, fetchLessons, fetchLesson, seedInitialContent, addLesson } from "./content.js";
+import {
+  fetchSubjects, fetchLessons, fetchLesson, seedInitialContent, addLesson,
+  createPost, fetchPostsForLesson, createQuestion, fetchQuestionsWithAnswers,
+  createAnswer, fetchAnswersForQuestion,
+} from "./content.js";
+
+const POST_TYPES = {
+  quick:   {emoji: '📝', label: 'شرح سريع'},
+  image:   {emoji: '🖼️', label: 'صورة / خريطة مفاهيم'},
+  example: {emoji: '💡', label: 'مثال من عندي'},
+};
 
 /* ---------- Firebase init ---------- */
 const app = initializeApp(firebaseConfig);
@@ -26,6 +36,12 @@ const state = {
   subjects: [],
   lessons: [],
   currentLesson: null,
+  posts: [],
+  questions: [],
+  allQuestions: [],
+  shareLessonId: '',
+  postType: 'quick',
+  expandedQuestions: new Set(),
   history: [],           // in-app back stack once inside student/teacher screens
 };
 
@@ -145,8 +161,81 @@ async function openSubjectLessons(){
   navigate('subjectLessons', {lessons});
 }
 async function openLesson(lessonId){
-  const lesson = await fetchLesson(db, lessonId).catch(() => null);
-  navigate('lessonDetail', {currentLesson: lesson});
+  const [lesson, posts, questions] = await Promise.all([
+    fetchLesson(db, lessonId).catch(() => null),
+    fetchPostsForLesson(db, lessonId, state.profile.uid).catch(() => []),
+    fetchQuestionsWithAnswers(db, lessonId).catch(() => []),
+  ]);
+  navigate('lessonDetail', {currentLesson: lesson, posts, questions});
+}
+async function openQuestionsList(){
+  const allQuestions = await fetchQuestionsWithAnswers(db).catch(() => []);
+  navigate('questionsList', {allQuestions});
+}
+function lessonTitleById(id){
+  const l = (state.lessons || []).find(x => x.id === id);
+  return l ? l.title : '';
+}
+async function handleSubmitPost(){
+  const lessonId = document.getElementById('postLesson').value;
+  const content = document.getElementById('postContent').value.trim();
+  if(!content){ showToast('اكتبي شرحك قبل الإرسال'); return; }
+  setState({loading:true});
+  try{
+    const lesson = (state.lessons || []).find(l => l.id === lessonId);
+    await createPost(db, {
+      lessonId,
+      subjectId: lesson ? lesson.subjectId : (state.subjects[0] && state.subjects[0].id),
+      studentUid: state.profile.uid,
+      studentName: state.profile.displayName,
+      type: state.postType,
+      title: '',
+      content,
+    });
+    setState({loading:false});
+    navigate('shareSuccess');
+  }catch(err){
+    setState({loading:false});
+    showToast('صار خطأ أثناء الإرسال، حاولي مرة أخرى.');
+  }
+}
+async function handleSubmitQuestion(){
+  const lessonId = document.getElementById('questionLesson').value;
+  const text = document.getElementById('questionText').value.trim();
+  if(!text){ showToast('اكتبي سؤالك قبل الإرسال'); return; }
+  setState({loading:true});
+  try{
+    const lesson = (state.lessons || []).find(l => l.id === lessonId);
+    await createQuestion(db, {
+      lessonId,
+      subjectId: lesson ? lesson.subjectId : (state.subjects[0] && state.subjects[0].id),
+      studentUid: state.profile.uid,
+      studentName: state.profile.displayName,
+      text,
+    });
+    setState({loading:false});
+    showToast('تم إرسال سؤالك 🎉');
+    await openQuestionsList();
+  }catch(err){
+    setState({loading:false});
+    showToast('صار خطأ أثناء الإرسال، حاولي مرة أخرى.');
+  }
+}
+async function handleSubmitAnswer(questionId, text){
+  try{
+    await createAnswer(db, {
+      questionId, studentUid: state.profile.uid, studentName: state.profile.displayName, text,
+    });
+    showToast('تم إرسال إجابتك ✨');
+    const freshAnswers = await fetchAnswersForQuestion(db, questionId).catch(() => []);
+    const updateList = (list) => (list || []).map(q => q.id === questionId ? {...q, answers: freshAnswers} : q);
+    setState({
+      questions: updateList(state.questions),
+      allQuestions: updateList(state.allQuestions),
+    });
+  }catch(err){
+    showToast('صار خطأ أثناء إرسال الإجابة.');
+  }
 }
 async function runSeed(){
   setState({loading:true});
@@ -209,8 +298,8 @@ function studentNav(){
   <div class="bottomnav">
     <button class="navitem ${active('studentHome')}" data-action="nav-student-home"><span class="ic-wrap">🏠</span>الرئيسية</button>
     <button class="navitem ${active('subjectLessons')||active('lessonDetail')}" data-action="nav-lessons"><span class="ic-wrap">📚</span>الدروس</button>
-    <button class="navitem" data-action="coming-soon"><span class="nav-raised">💡</span></button>
-    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">🆘</span>الأسئلة</button>
+    <button class="navitem" data-action="nav-share"><span class="nav-raised">💡</span></button>
+    <button class="navitem ${active('questionsList')}" data-action="nav-questions-list"><span class="ic-wrap">🆘</span>الأسئلة</button>
     <button class="navitem" data-action="coming-soon"><span class="ic-wrap">🏆</span>إنجازي</button>
   </div>`;
 }
@@ -300,14 +389,14 @@ function viewStudentHome(){
       <p class="sub">وش ودك تسوين اليوم؟</p>
     </div>
     <div style="padding:0 18px;">
-      <button class="role-card disabled" data-action="coming-soon">
+      <button class="role-card" data-action="nav-share">
         <div class="badge" style="background:var(--primary-soft)">💡</div>
-        <div><div class="r-title">فهمتها بطريقتي</div><div class="r-sub">شاركي زميلاتك طريقة فهمك — قريبًا</div></div>
+        <div><div class="r-title">فهمتها بطريقتي</div><div class="r-sub">شاركي زميلاتك طريقة فهمك</div></div>
         <span class="chev">←</span>
       </button>
-      <button class="role-card disabled" data-action="coming-soon">
+      <button class="role-card" data-action="nav-ask">
         <div class="badge" style="background:var(--coral-soft)">🆘</div>
-        <div><div class="r-title">أنقذوني!</div><div class="r-sub">في شيء مو فاهمته؟ اسألي زميلاتك — قريبًا</div></div>
+        <div><div class="r-title">أنقذوني!</div><div class="r-sub">في شيء مو فاهمته؟ اسألي زميلاتك</div></div>
         <span class="chev">←</span>
       </button>
       <button class="role-card" data-action="nav-lessons">
@@ -354,21 +443,130 @@ function viewSubjectLessons(){
   </div>`;
 }
 
+function postCard(p){
+  const isMine = state.profile && p.studentUid === state.profile.uid;
+  const pending = p.status === 'pending';
+  const t = POST_TYPES[p.type] || {emoji:'📝', label:''};
+  return `
+  <div class="post-card">
+    <div class="p-head">
+      <div class="badge sm" style="background:var(--primary-soft)">${t.emoji}</div>
+      <div style="flex:1;">
+        <div class="p-who">${p.studentName}${isMine ? ' (أنتِ)' : ''}</div>
+        <div class="p-meta">${t.label}</div>
+      </div>
+      ${pending ? `<span class="pending-tag">⏳ بانتظار الاعتماد</span>` : ''}
+    </div>
+    <div class="p-body">${p.content}</div>
+  </div>`;
+}
+
+function questionCard(q){
+  const expanded = state.expandedQuestions.has(q.id);
+  const showLessonTag = state.view === 'questionsList';
+  return `
+  <div class="post-card">
+    <div style="font-weight:700; color:var(--ink); margin-bottom:6px; font-size:14px;">${q.text}</div>
+    <div class="p-meta" style="margin-bottom:8px;">سألتها ${q.studentName}${showLessonTag ? ' · ' + lessonTitleById(q.lessonId) : ''}</div>
+    <button class="link-btn" style="margin:0; text-align:right;" data-action="toggle-question" data-id="${q.id}">
+      ${q.answers.length ? `💬 ${q.answers.length} إجابة${q.answers.length>1?'ات':''} — ${expanded?'إخفاء':'عرض'}` : (expanded ? 'إخفاء نموذج الإجابة' : '✍️ كوني أول من تجاوب')}
+    </button>
+    ${expanded ? `
+      ${q.answers.map(a => `<div class="answer-line"><b>${a.studentName}:</b> ${a.text}</div>`).join('')}
+      <form class="answer-form" data-answer-for="${q.id}">
+        <input type="text" placeholder="اكتبي إجابتك..." required>
+        <button type="submit">إرسال</button>
+      </form>` : ''}
+  </div>`;
+}
+
 function viewLessonDetail(){
   const l = state.currentLesson;
+  const posts = state.posts || [];
+  const questions = state.questions || [];
   return `
   <div class="content-app">
     ${pageHead(l ? l.title : 'الدرس', '🧲 الفيزياء')}
-    <div class="section-title">💡 شروحات الطالبات المعتمدة</div>
-    <div class="empty-state">
-      <span class="emoji">💭</span>
-      لسه ما فيه شروحات لهالدرس — ميزة المشاركة بتُبنى بالمرحلة القادمة.
-    </div>
+    <div class="section-title">💡 شروحات الطالبات</div>
+    ${posts.length ? posts.map(postCard).join('') : `
+      <div class="empty-state"><span class="emoji">💭</span>لسه ما فيه شروحات لهالدرس. كوني أول من تشارك فهمها!</div>`}
+    <button class="btn btn-primary" style="margin-top:4px;" data-action="nav-share" data-lesson="${l?l.id:''}">💡 شاركي فهمك بهالدرس</button>
+
     <div class="section-title">🆘 الأسئلة المتعلقة بالدرس</div>
-    <div class="empty-state">
-      <span class="emoji">🆘</span>
-      لسه ما فيه أسئلة لهالدرس — ميزة الأسئلة بتُبنى بالمرحلة القادمة.
+    ${questions.length ? questions.map(questionCard).join('') : `
+      <div class="empty-state"><span class="emoji">🆘</span>ولا سؤال لهالدرس بعد.</div>`}
+    <button class="btn btn-coral" style="margin-top:4px;" data-action="nav-ask" data-lesson="${l?l.id:''}">🆘 اسألي عن هالدرس</button>
+  </div>`;
+}
+
+function viewSharePost(){
+  const lessons = state.lessons || [];
+  const selected = state.shareLessonId || (lessons[0] && lessons[0].id) || '';
+  return `
+  <div class="content-app">
+    ${pageHead('فهمتها بطريقتي 💡', 'شاركي زميلاتك طريقة فهمك')}
+    <div class="field">
+      <label>الدرس</label>
+      <select id="postLesson">
+        ${lessons.map(l => `<option value="${l.id}" ${l.id===selected?'selected':''}>${l.title}</option>`).join('')}
+      </select>
     </div>
+    <div class="field">
+      <label>نوع المشاركة</label>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        ${Object.entries(POST_TYPES).map(([key,t]) => `
+          <button type="button" class="type-chip ${state.postType===key?'selected':''}" data-action="pick-type" data-type="${key}">${t.emoji} ${t.label}</button>`).join('')}
+      </div>
+    </div>
+    <div class="field">
+      <label>اشرحيها بطريقتك</label>
+      <textarea id="postContent" placeholder="اكتبي شرحك هنا..."></textarea>
+    </div>
+    <button class="btn btn-primary" data-action="submit-post" ${state.loading?'disabled':''}>${state.loading?'جارِ الإرسال...':'إرسال للمعلمة'}</button>
+  </div>`;
+}
+
+function viewShareSuccess(){
+  return `
+  <div class="content">
+    <div class="success-screen">
+      <div class="semoji">🎉</div>
+      <h2>وصلت مشاركتك!</h2>
+      <p>بعد اعتماد المعلمة ستظهر لزميلاتك.</p>
+      <button class="btn btn-primary" data-action="nav-student-home">رجوع للرئيسية</button>
+    </div>
+  </div>`;
+}
+
+function viewAskQuestion(){
+  const lessons = state.lessons || [];
+  const selected = state.shareLessonId || (lessons[0] && lessons[0].id) || '';
+  return `
+  <div class="content-app">
+    ${pageHead('أنقذوني! 🆘', 'وين علقتي؟')}
+    <div class="field">
+      <label>الدرس</label>
+      <select id="questionLesson">
+        ${lessons.map(l => `<option value="${l.id}" ${l.id===selected?'selected':''}>${l.title}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field">
+      <label>سؤالك</label>
+      <textarea id="questionText" placeholder="مثال: ما فهمت ليش..."></textarea>
+    </div>
+    <button class="btn btn-coral" data-action="submit-question" ${state.loading?'disabled':''}>${state.loading?'جارِ الإرسال...':'اسألي PeerUp'}</button>
+  </div>`;
+}
+
+function viewQuestionsList(){
+  const questions = state.allQuestions || [];
+  return `
+  <div class="content-app">
+    <div class="page-head" style="padding-top:2px;">
+      <div style="flex:1;"><h2>🆘 أسئلة الطالبات</h2></div>
+      <button class="btn btn-coral" style="width:auto; padding:9px 14px;" data-action="nav-ask">+ اسألي</button>
+    </div>
+    ${questions.length ? questions.map(questionCard).join('') : `<div class="empty-state"><span class="emoji">🆘</span>ولا سؤال لسه.</div>`}
   </div>`;
 }
 
@@ -426,6 +624,10 @@ function render(){
   if(state.view === 'studentHome'){ app.innerHTML = viewStudentHome() + studentNav(); return; }
   if(state.view === 'subjectLessons'){ app.innerHTML = viewSubjectLessons() + studentNav(); return; }
   if(state.view === 'lessonDetail'){ app.innerHTML = viewLessonDetail() + studentNav(); return; }
+  if(state.view === 'sharePost'){ app.innerHTML = viewSharePost() + studentNav(); return; }
+  if(state.view === 'shareSuccess'){ app.innerHTML = viewShareSuccess() + studentNav(); return; }
+  if(state.view === 'askQuestion'){ app.innerHTML = viewAskQuestion() + studentNav(); return; }
+  if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
   if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
   app.innerHTML = viewLanding();
 }
@@ -455,12 +657,41 @@ document.addEventListener('click', (e) => {
     openLesson(el.dataset.id);
   } else if(action === 'seed-content'){
     runSeed();
+  } else if(action === 'nav-share'){
+    state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
+    setState({postType:'quick'});
+    navigate('sharePost');
+  } else if(action === 'nav-ask'){
+    state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
+    navigate('askQuestion');
+  } else if(action === 'nav-questions-list'){
+    openQuestionsList();
+  } else if(action === 'pick-type'){
+    setState({postType: el.dataset.type});
+  } else if(action === 'submit-post'){
+    handleSubmitPost();
+  } else if(action === 'submit-question'){
+    handleSubmitQuestion();
+  } else if(action === 'toggle-question'){
+    const id = el.dataset.id;
+    if(state.expandedQuestions.has(id)) state.expandedQuestions.delete(id);
+    else state.expandedQuestions.add(id);
+    render();
   } else if(action === 'coming-soon'){
     comingSoon();
   }
 });
 
 document.addEventListener('submit', (e) => {
+  const answerFor = e.target.dataset && e.target.dataset.answerFor;
+  if(answerFor){
+    e.preventDefault();
+    const input = e.target.querySelector('input');
+    const text = input.value.trim();
+    if(!text) return;
+    handleSubmitAnswer(answerFor, text);
+    return;
+  }
   if(e.target.id === 'addLessonForm'){
     e.preventDefault();
     const input = document.getElementById('newLessonTitle');
