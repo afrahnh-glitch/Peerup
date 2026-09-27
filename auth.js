@@ -11,6 +11,7 @@ import {
   fetchSubjects, fetchLessons, fetchLesson, seedInitialContent, addLesson,
   createPost, fetchPostsForLesson, createQuestion, fetchQuestionsWithAnswers,
   createAnswer, fetchAnswersForQuestion,
+  fetchPendingPosts, approvePost, rejectPost, deletePost,
 } from "./content.js";
 
 const POST_TYPES = {
@@ -42,6 +43,7 @@ const state = {
   shareLessonId: '',
   postType: 'quick',
   expandedQuestions: new Set(),
+  pendingPosts: [],
   history: [],           // in-app back stack once inside student/teacher screens
 };
 
@@ -134,8 +136,12 @@ async function loadProfileAndGo(uid){
   if(subjects.length){
     lessons = await fetchLessons(db, subjects[0].id).catch(() => []);
   }
+  let pendingPosts = [];
+  if(profile.role === 'teacher'){
+    pendingPosts = await fetchPendingPosts(db).catch(() => []);
+  }
   setState({
-    loading:false, profile, subjects, lessons, history:[],
+    loading:false, profile, subjects, lessons, pendingPosts, history:[],
     view: profile.role === 'teacher' ? 'teacherHome' : 'studentHome',
   });
 }
@@ -263,6 +269,37 @@ async function handleAddLesson(title){
     showToast('صار خطأ أثناء إضافة الدرس. تأكدي إنك مسجّلة كمعلمة.');
   }
 }
+async function openTeacherReview(){
+  const pendingPosts = await fetchPendingPosts(db).catch(() => []);
+  navigate('teacherReview', {pendingPosts});
+}
+async function handleApprovePost(id){
+  try{
+    await approvePost(db, id);
+    setState({pendingPosts: state.pendingPosts.filter(p => p.id !== id)});
+    showToast('✅ تم اعتماد المشاركة');
+  }catch(err){
+    showToast('صار خطأ أثناء الاعتماد.');
+  }
+}
+async function handleRejectPost(id){
+  try{
+    await rejectPost(db, id);
+    setState({pendingPosts: state.pendingPosts.filter(p => p.id !== id)});
+    showToast('تم رفض المشاركة');
+  }catch(err){
+    showToast('صار خطأ أثناء الرفض.');
+  }
+}
+async function handleDeletePost(id){
+  try{
+    await deletePost(db, id);
+    setState({pendingPosts: state.pendingPosts.filter(p => p.id !== id)});
+    showToast('🗑️ تم حذف المشاركة نهائيًا');
+  }catch(err){
+    showToast('صار خطأ أثناء الحذف.');
+  }
+}
 
 /* ---------- keep session on reload ---------- */
 onAuthStateChanged(auth, async (user) => {
@@ -308,7 +345,7 @@ function teacherNav(){
   return `
   <div class="bottomnav">
     <button class="navitem ${active('teacherHome')}" data-action="nav-teacher-home"><span class="ic-wrap">🏠</span>الرئيسية</button>
-    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">📥</span>المراجعة</button>
+    <button class="navitem ${active('teacherReview')}" data-action="nav-teacher-review"><span class="ic-wrap">📥</span>المراجعة</button>
     <button class="navitem" data-action="coming-soon"><span class="ic-wrap">❓</span>الأسئلة</button>
     <button class="navitem" data-action="coming-soon"><span class="ic-wrap">📊</span>الإحصائيات</button>
   </div>`;
@@ -575,6 +612,7 @@ function viewTeacherHome(){
   const p = state.profile || {};
   const subjCount = state.subjects.length;
   const lessonCount = state.lessons.length;
+  const pendingCount = (state.pendingPosts || []).length;
   return `
   <div class="content-app">
     <div class="dash-header">
@@ -582,6 +620,11 @@ function viewTeacherHome(){
       <h2 style="margin:0;">${p.displayName || ''}</h2>
       <span class="role-chip teacher">👩🏻‍🏫 معلمة</span>
     </div>
+    <button class="role-card" data-action="nav-teacher-review" style="margin-top:4px;">
+      <div class="badge" style="background:var(--coral-soft)">📥</div>
+      <div><div class="r-title">${pendingCount} مشاركة تنتظر المراجعة</div><div class="r-sub">اضغطي لاعتماد أو رفض المشاركات</div></div>
+      <span class="chev">←</span>
+    </button>
     <div class="info-card">
       المواد الحالية: <b>${subjCount}</b> — الدروس: <b>${lessonCount}</b>
       ${subjCount===0 ? `
@@ -612,6 +655,38 @@ function viewTeacherHome(){
   </div>`;
 }
 
+function pendingPostCard(p){
+  const t = POST_TYPES[p.type] || {emoji:'📝', label:''};
+  return `
+  <div class="post-card">
+    <div class="p-head">
+      <div class="badge sm" style="background:var(--primary-soft)">${t.emoji}</div>
+      <div style="flex:1;">
+        <div class="p-who">${p.studentName}</div>
+        <div class="p-meta">${t.label} · ${lessonTitleById(p.lessonId)}</div>
+      </div>
+    </div>
+    <div class="p-body" style="margin-bottom:12px;">${p.content}</div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-primary" style="width:auto; flex:1;" data-action="approve-post" data-id="${p.id}">✓ اعتماد</button>
+      <button class="btn" style="width:auto; flex:1; background:var(--surface); border:1.5px solid var(--border); color:var(--ink);" data-action="reject-post" data-id="${p.id}">✕ رفض</button>
+      <button class="btn" style="width:auto; padding:0 14px; background:var(--danger-soft); color:var(--danger);" data-action="delete-post" data-id="${p.id}">🗑️</button>
+    </div>
+  </div>`;
+}
+
+function viewTeacherReview(){
+  const pending = state.pendingPosts || [];
+  return `
+  <div class="content-app">
+    <div class="page-head" style="padding-top:2px;">
+      <div><h2>📥 المراجعة</h2><div class="p-sub">${pending.length} مشاركة تنتظر الاعتماد</div></div>
+    </div>
+    ${pending.length ? pending.map(pendingPostCard).join('') : `
+      <div class="empty-state"><span class="emoji">✅</span>ما فيه شي بانتظار المراجعة حاليًا.</div>`}
+  </div>`;
+}
+
 /* ---------- main render ---------- */
 function render(){
   const app = document.getElementById('app');
@@ -629,6 +704,7 @@ function render(){
   if(state.view === 'askQuestion'){ app.innerHTML = viewAskQuestion() + studentNav(); return; }
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
   if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
+  if(state.view === 'teacherReview'){ app.innerHTML = viewTeacherReview() + teacherNav(); return; }
   app.innerHTML = viewLanding();
 }
 
@@ -651,6 +727,14 @@ document.addEventListener('click', (e) => {
     setState({view:'studentHome', history:[]});
   } else if(action === 'nav-teacher-home'){
     setState({view:'teacherHome', history:[]});
+  } else if(action === 'nav-teacher-review'){
+    openTeacherReview();
+  } else if(action === 'approve-post'){
+    handleApprovePost(el.dataset.id);
+  } else if(action === 'reject-post'){
+    handleRejectPost(el.dataset.id);
+  } else if(action === 'delete-post'){
+    handleDeletePost(el.dataset.id);
   } else if(action === 'nav-lessons'){
     openSubjectLessons();
   } else if(action === 'nav-lesson'){
