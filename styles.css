@@ -110,6 +110,15 @@ input{font-family:inherit;}
 }
 .field textarea{resize:vertical; min-height:100px; line-height:1.7;}
 .field textarea:focus, .field select:focus{outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(124,92,252,.15);}
+.upload-box{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+  border:1.8px dashed var(--border); border-radius:16px; padding:22px; color:var(--ink-soft);
+  font-size:12.8px; text-align:center; cursor:pointer;
+}
+.img-preview-wrap{position:relative; border-radius:16px; overflow:hidden;}
+.img-preview-wrap img{width:100%; max-height:180px; object-fit:cover; display:block;}
+.img-remove{position:absolute; top:8px; left:8px; background:rgba(23,32,51,.6); color:#fff; border:none; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center;}
+.post-image{width:100%; border-radius:14px; margin:10px 0; display:block; max-height:220px; object-fit:cover;}
 .type-chip{border:1.5px solid var(--border); background:var(--surface); border-radius:12px; padding:9px 13px; font-size:12.8px; font-weight:700; color:var(--ink-soft); transition:background .15s ease, color .15s ease;}
 .type-chip.selected{background:var(--primary); color:#fff; border-color:var(--primary);}
 .post-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:14px; margin-bottom:12px; box-shadow:0 8px 20px -16px rgba(23,37,84,.16);}
