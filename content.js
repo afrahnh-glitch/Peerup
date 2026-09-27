@@ -1,5 +1,5 @@
 import {
-  collection, doc, getDocs, getDoc, setDoc, addDoc, query, orderBy
+  collection, doc, getDocs, getDoc, setDoc, addDoc, query, where, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 export async function fetchSubjects(db){
@@ -53,4 +53,73 @@ export async function seedInitialContent(db){
   for(const s of subjects){ await setDoc(doc(db, 'subjects', s.id), s); }
   for(const l of lessons){ await setDoc(doc(db, 'lessons', l.id), l); }
   return {subjects: subjects.length, lessons: lessons.length};
+}
+
+/* ================= المرحلة 3: الشروحات (posts) ================= */
+
+// تنشئ مشاركة بحالة "قيد المراجعة" دايمًا — ما تظهر لبقية الطالبات
+// إلا بعد اعتماد المعلمة (يُبنى بالمرحلة 4).
+export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content}){
+  const docRef = await addDoc(collection(db, 'posts'), {
+    lessonId, subjectId, studentUid, studentName, type, title, content,
+    status: 'pending', likes: 0,
+    createdAt: serverTimestamp(), createdAtMs: Date.now(),
+  });
+  return docRef.id;
+}
+
+// تُرجع فقط المشاركات المسموح للطالبة الحالية تشوفها: المعتمدة للجميع،
+// ومشاركاتها الشخصية ولو لسه قيد المراجعة. مقسّمة لطلبين منفصلين متوافقين
+// مع قواعد Firestore (طلب واحد فيه فلترين يفشل إذا وجدت مشاركات "قيد
+// المراجعة" لطالبات أخريات بنفس الدرس).
+export async function fetchPostsForLesson(db, lessonId, uid){
+  const approvedQ = query(collection(db, 'posts'),
+    where('lessonId', '==', lessonId), where('status', '==', 'approved'));
+  const mineQ = query(collection(db, 'posts'),
+    where('lessonId', '==', lessonId), where('studentUid', '==', uid));
+  const [approvedSnap, mineSnap] = await Promise.all([getDocs(approvedQ), getDocs(mineQ)]);
+  const map = new Map();
+  approvedSnap.docs.forEach(d => map.set(d.id, {id: d.id, ...d.data()}));
+  mineSnap.docs.forEach(d => map.set(d.id, {id: d.id, ...d.data()}));
+  return [...map.values()].sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+}
+
+/* ================= المرحلة 3: الأسئلة والإجابات ================= */
+
+export async function createQuestion(db, {lessonId, subjectId, studentUid, studentName, text}){
+  const docRef = await addDoc(collection(db, 'questions'), {
+    lessonId, subjectId, studentUid, studentName, text,
+    createdAt: serverTimestamp(), createdAtMs: Date.now(),
+  });
+  return docRef.id;
+}
+
+export async function fetchAnswersForQuestion(db, questionId){
+  const q = query(collection(db, 'answers'), where('questionId', '==', questionId));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({id: d.id, ...d.data()}))
+    .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
+}
+
+// تُرجع الأسئلة (لدرس معيّن أو كل الدروس) مع إجاباتها مجمّعة مسبقًا.
+export async function fetchQuestionsWithAnswers(db, lessonId){
+  const base = collection(db, 'questions');
+  const q = lessonId ? query(base, where('lessonId', '==', lessonId)) : query(base);
+  const snap = await getDocs(q);
+  const questions = snap.docs
+    .map(d => ({id: d.id, ...d.data()}))
+    .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+  await Promise.all(questions.map(async (question) => {
+    question.answers = await fetchAnswersForQuestion(db, question.id);
+  }));
+  return questions;
+}
+
+export async function createAnswer(db, {questionId, studentUid, studentName, text}){
+  const docRef = await addDoc(collection(db, 'answers'), {
+    questionId, studentUid, studentName, text,
+    createdAt: serverTimestamp(), createdAtMs: Date.now(),
+  });
+  return docRef.id;
 }
