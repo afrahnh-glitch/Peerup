@@ -63,10 +63,11 @@ export async function seedInitialContent(db){
 
 // تنشئ مشاركة بحالة "قيد المراجعة" دايمًا — ما تظهر لبقية الطالبات
 // إلا بعد اعتماد المعلمة (يُبنى بالمرحلة 4).
-export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, imageUrl}){
+export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, imageUrl, drawingData}){
   const docRef = await addDoc(collection(db, 'posts'), {
     lessonId, subjectId, studentUid, studentName, type, title, content,
     imageUrl: imageUrl || null,
+    drawingData: (drawingData && drawingData.length) ? drawingData : null,
     status: 'pending', likes: 0,
     createdAt: serverTimestamp(), createdAtMs: Date.now(),
   });
