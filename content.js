@@ -1,5 +1,6 @@
 import {
-  collection, doc, getDocs, getDoc, setDoc, addDoc, query, where, orderBy, serverTimestamp
+  collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
+  query, where, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 export async function fetchSubjects(db){
@@ -122,4 +123,26 @@ export async function createAnswer(db, {questionId, studentUid, studentName, tex
     createdAt: serverTimestamp(), createdAtMs: Date.now(),
   });
   return docRef.id;
+}
+
+/* ================= المرحلة 4: مراجعة المعلمة ================= */
+
+// آمن للمعلمة: قاعدة الأمان تسمح لها بأي استعلام بفضل شرط isTeacher()
+// المستقل عن بيانات المستند نفسه.
+export async function fetchPendingPosts(db){
+  const q = query(collection(db, 'posts'), where('status', '==', 'pending'));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({id: d.id, ...d.data()}))
+    .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0)); // الأقدم أول (عدالة بالترتيب)
+}
+
+export async function approvePost(db, postId){
+  await updateDoc(doc(db, 'posts', postId), {status: 'approved'});
+}
+export async function rejectPost(db, postId){
+  await updateDoc(doc(db, 'posts', postId), {status: 'rejected'});
+}
+export async function deletePost(db, postId){
+  await deleteDoc(doc(db, 'posts', postId));
 }
