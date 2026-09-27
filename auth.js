@@ -57,6 +57,101 @@ const state = {
 function setState(patch){ Object.assign(state, patch); render(); }
 
 let selectedImageFile = null; // ملف الصورة المختارة لمشاركة حالية (اختياري)
+let drawStrokes = [];         // خطوط الرسم الحرة لخريطة ذهنية (اختياري)
+let currentStroke = null;
+let drawColor = '#7C5CFC';
+let shapeSnapEnabled = true;  // تنسيق هندسي بسيط (دوائر/خطوط) — بدون أي ذكاء اصطناعي
+
+function dist(a, b){ return Math.hypot(a[0]-b[0], a[1]-b[1]); }
+
+// تنسيق هندسي بسيط: يتعرف على دائرة تقريبية أو خط شبه مستقيم بحساب
+// رياضي عادي (لا يوجد أي تعرّف بالذكاء الاصطناعي ولا خدمة خارجية).
+// أي شكل غير هذين النمطين (كتابة، خربشة حرة) يبقى كما رسمته الطالبة تمامًا.
+function trySnapShape(stroke){
+  const pts = stroke.points;
+  if(pts.length < 6) return;
+  const start = pts[0], end = pts[pts.length-1];
+  const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
+  const bboxDiag = Math.hypot(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys));
+  if(bboxDiag < 12) return;
+
+  // دائرة: خط شبه مقفول ونصف قطر شبه ثابت عن مركز الثقل
+  if(dist(start, end) < bboxDiag * 0.25){
+    const cx = xs.reduce((a,b)=>a+b,0)/xs.length;
+    const cy = ys.reduce((a,b)=>a+b,0)/ys.length;
+    const radii = pts.map(([x,y]) => Math.hypot(x-cx, y-cy));
+    const avgR = radii.reduce((a,b)=>a+b,0)/radii.length;
+    const stddev = Math.sqrt(radii.reduce((a,b)=>a+(b-avgR)**2,0)/radii.length);
+    if(avgR > 6 && stddev/avgR < 0.3){
+      const steps = 48, newPts = [];
+      for(let i=0;i<=steps;i++){
+        const a = (i/steps) * Math.PI * 2;
+        newPts.push([Math.round(cx+avgR*Math.cos(a)), Math.round(cy+avgR*Math.sin(a))]);
+      }
+      stroke.points = newPts;
+      return;
+    }
+  }
+
+  // خط مستقيم: كل النقاط قريبة جدًا من الخط الواصل بين البداية والنهاية
+  const lineLen = dist(start, end);
+  if(lineLen > 15){
+    const [x1,y1] = start, [x2,y2] = end;
+    const den = Math.hypot(y2-y1, x2-x1) || 1;
+    const maxDev = Math.max(...pts.map(([x,y]) => Math.abs((y2-y1)*x-(x2-x1)*y+x2*y1-y2*x1)/den));
+    if(maxDev < Math.max(6, lineLen*0.06)){
+      stroke.points = [start, end];
+    }
+  }
+}
+
+function redrawCanvas(){
+  const canvas = document.getElementById('drawCanvas');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawStrokes.forEach(stroke => {
+    if(stroke.points.length < 2) return;
+    ctx.beginPath();
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    stroke.points.forEach(([x,y], i) => { i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); });
+    ctx.stroke();
+  });
+}
+function setupDrawingCanvas(){
+  const canvas = document.getElementById('drawCanvas');
+  if(!canvas) return;
+  redrawCanvas();
+  function getPos(e){
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return [Math.round((e.clientX-rect.left)*scaleX), Math.round((e.clientY-rect.top)*scaleY)];
+  }
+  canvas.onpointerdown = (e) => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    currentStroke = {color: drawColor, points:[getPos(e)]};
+    drawStrokes.push(currentStroke);
+  };
+  canvas.onpointermove = (e) => {
+    if(!currentStroke) return;
+    const pos = getPos(e);
+    const last = currentStroke.points[currentStroke.points.length-1];
+    if(Math.hypot(pos[0]-last[0], pos[1]-last[1]) < 2) return;
+    currentStroke.points.push(pos);
+    redrawCanvas();
+  };
+  canvas.onpointerup = () => {
+    if(currentStroke && shapeSnapEnabled) trySnapShape(currentStroke);
+    currentStroke = null;
+    redrawCanvas();
+  };
+  canvas.onpointerleave = () => { currentStroke = null; };
+}
 
 function showToast(msg){
   const old = document.querySelector('.toast');
@@ -234,8 +329,10 @@ async function handleSubmitPost(){
       title: '',
       content,
       imageUrl,
+      drawingData: drawStrokes,
     });
     selectedImageFile = null;
+    drawStrokes = [];
     setState({loading:false});
     navigate('shareSuccess');
   }catch(err){
@@ -520,6 +617,16 @@ function viewSubjectLessons(){
   </div>`;
 }
 
+function renderDrawingSvg(strokes){
+  if(!strokes || !strokes.length) return '';
+  const paths = strokes.map(s => {
+    if(!s.points || s.points.length < 2) return '';
+    const d = s.points.map(([x,y], i) => (i===0?'M':'L') + x + ' ' + y).join(' ');
+    return `<path d="${d}" stroke="${s.color}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }).join('');
+  return `<svg viewBox="0 0 300 220" class="post-drawing">${paths}</svg>`;
+}
+
 function postCard(p){
   const isMine = state.profile && p.studentUid === state.profile.uid;
   const pending = p.status === 'pending';
@@ -536,6 +643,7 @@ function postCard(p){
     </div>
     <div class="p-body">${p.content}</div>
     ${p.imageUrl ? `<img class="post-image" src="${p.imageUrl}" alt="صورة مرفقة بالشرح">` : ''}
+    ${p.drawingData ? renderDrawingSvg(p.drawingData) : ''}
     ${!pending ? `
     <div style="margin-top:11px;">
       <button class="pill-btn ${p.likedByMe?'liked':''}" data-action="like-post" data-id="${p.id}" ${p.likedByMe||isMine?'disabled':''}>
@@ -615,6 +723,20 @@ function viewSharePost(){
           <span>اضغطي لاختيار صورة من جهازك</span>
         </label>
       </div>
+    </div>
+    <div class="field">
+      <label>أو ارسمي خريطة ذهنية (اختياري)</label>
+      <div class="drawing-toolbar">
+        ${['#172033','#7C5CFC','#65C7FF','#2FAF86','#E2924B'].map((c,i) => `
+          <button type="button" class="swatch ${i===1?'selected':''}" data-action="pick-draw-color" data-color="${c}" style="background:${c}"></button>`).join('')}
+        <button type="button" class="tool-btn" data-action="undo-stroke">↩️ تراجع</button>
+        <button type="button" class="tool-btn" data-action="clear-drawing">🗑️ مسح الكل</button>
+        <label style="display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--ink-soft); margin-inline-start:auto;">
+          <input type="checkbox" id="shapeSnapToggle" ${shapeSnapEnabled?'checked':''}>
+          🔷 تنسيق الأشكال
+        </label>
+      </div>
+      <canvas id="drawCanvas" class="draw-canvas" width="300" height="220"></canvas>
     </div>
     <button class="btn btn-primary" data-action="submit-post" ${state.loading?'disabled':''}>${state.loading?(state.uploadingImage?'جارِ رفع الصورة...':'جارِ الإرسال...'):'إرسال للمعلمة'}</button>
   </div>`;
@@ -785,7 +907,7 @@ function render(){
   if(state.view === 'studentHome'){ app.innerHTML = viewStudentHome() + studentNav(); return; }
   if(state.view === 'subjectLessons'){ app.innerHTML = viewSubjectLessons() + studentNav(); return; }
   if(state.view === 'lessonDetail'){ app.innerHTML = viewLessonDetail() + studentNav(); return; }
-  if(state.view === 'sharePost'){ app.innerHTML = viewSharePost() + studentNav(); return; }
+  if(state.view === 'sharePost'){ app.innerHTML = viewSharePost() + studentNav(); setupDrawingCanvas(); return; }
   if(state.view === 'shareSuccess'){ app.innerHTML = viewShareSuccess() + studentNav(); return; }
   if(state.view === 'askQuestion'){ app.innerHTML = viewAskQuestion() + studentNav(); return; }
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
@@ -797,6 +919,10 @@ function render(){
 
 /* ---------- events ---------- */
 document.addEventListener('change', (e) => {
+  if(e.target.id === 'shapeSnapToggle'){
+    shapeSnapEnabled = e.target.checked;
+    return;
+  }
   if(e.target.id === 'postImageInput'){
     const file = e.target.files[0];
     if(!file) return;
@@ -850,6 +976,9 @@ document.addEventListener('click', (e) => {
   } else if(action === 'nav-share'){
     state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
     selectedImageFile = null;
+    drawStrokes = [];
+    currentStroke = null;
+    shapeSnapEnabled = true;
     setState({postType:'quick'});
     navigate('sharePost');
   } else if(action === 'remove-post-image'){
@@ -862,6 +991,18 @@ document.addEventListener('click', (e) => {
           <span>اضغطي لاختيار صورة من جهازك</span>
         </label>`;
     }
+  } else if(action === 'pick-draw-color'){
+    // تعديل مباشر على DOM بدل setState عشان ما يُعاد رسم الصفحة كاملة
+    // (وإلا كان بيمسح الرسمة الحالية على الكانفاس).
+    drawColor = el.dataset.color;
+    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+  } else if(action === 'undo-stroke'){
+    drawStrokes.pop();
+    redrawCanvas();
+  } else if(action === 'clear-drawing'){
+    drawStrokes = [];
+    redrawCanvas();
   } else if(action === 'nav-ask'){
     state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
     navigate('askQuestion');
