@@ -12,6 +12,7 @@ import {
   createPost, fetchPostsForLesson, createQuestion, fetchQuestionsWithAnswers,
   createAnswer, fetchAnswersForQuestion,
   fetchPendingPosts, approvePost, rejectPost, deletePost,
+  attachLikeInfo, likePost, computeStudentPoints, fetchLeaderboard,
 } from "./content.js";
 
 const POST_TYPES = {
@@ -44,6 +45,8 @@ const state = {
   postType: 'quick',
   expandedQuestions: new Set(),
   pendingPosts: [],
+  myStats: null,
+  leaderboard: [],
   history: [],           // in-app back stack once inside student/teacher screens
 };
 
@@ -167,12 +170,33 @@ async function openSubjectLessons(){
   navigate('subjectLessons', {lessons});
 }
 async function openLesson(lessonId){
-  const [lesson, posts, questions] = await Promise.all([
+  const [lesson, rawPosts, questions] = await Promise.all([
     fetchLesson(db, lessonId).catch(() => null),
     fetchPostsForLesson(db, lessonId, state.profile.uid).catch(() => []),
     fetchQuestionsWithAnswers(db, lessonId).catch(() => []),
   ]);
+  const posts = await attachLikeInfo(db, rawPosts, state.profile.uid).catch(() => rawPosts);
   navigate('lessonDetail', {currentLesson: lesson, posts, questions});
+}
+async function handleLikePost(postId){
+  try{
+    await likePost(db, postId, state.profile.uid);
+    const updated = (state.posts || []).map(p =>
+      p.id === postId ? {...p, likedByMe: true, likesCount: (p.likesCount||0) + 1} : p);
+    setState({posts: updated});
+    showToast('💡 شكرًا! أفدتِ صاحبة الشرح بنقطتين');
+  }catch(err){
+    showToast('يبدو إنك سبق ووصلتِها بـ«أفادني».');
+  }
+}
+async function openAchievements(){
+  setState({loading:true});
+  const [myStats, leaderboard] = await Promise.all([
+    computeStudentPoints(db, state.profile.uid).catch(() => null),
+    fetchLeaderboard(db, 5).catch(() => []),
+  ]);
+  setState({loading:false});
+  navigate('achievements', {myStats, leaderboard});
 }
 async function openQuestionsList(){
   const allQuestions = await fetchQuestionsWithAnswers(db).catch(() => []);
@@ -338,7 +362,7 @@ function studentNav(){
     <button class="navitem ${active('subjectLessons')||active('lessonDetail')}" data-action="nav-lessons"><span class="ic-wrap">📚</span>الدروس</button>
     <button class="navitem" data-action="nav-share"><span class="nav-raised">💡</span></button>
     <button class="navitem ${active('questionsList')}" data-action="nav-questions-list"><span class="ic-wrap">🆘</span>الأسئلة</button>
-    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">🏆</span>إنجازي</button>
+    <button class="navitem ${active('achievements')}" data-action="nav-achievements"><span class="ic-wrap">🏆</span>إنجازي</button>
   </div>`;
 }
 function teacherNav(){
@@ -497,6 +521,12 @@ function postCard(p){
       ${pending ? `<span class="pending-tag">⏳ بانتظار الاعتماد</span>` : ''}
     </div>
     <div class="p-body">${p.content}</div>
+    ${!pending ? `
+    <div style="margin-top:11px;">
+      <button class="pill-btn ${p.likedByMe?'liked':''}" data-action="like-post" data-id="${p.id}" ${p.likedByMe||isMine?'disabled':''}>
+        💡 أفادني <span>${p.likesCount||0}</span>
+      </button>
+    </div>` : ''}
   </div>`;
 }
 
@@ -609,6 +639,35 @@ function viewQuestionsList(){
   </div>`;
 }
 
+function viewAchievements(){
+  const s = state.myStats || {points:0, explanationsCount:0, answersCount:0, likesReceived:0, helpedCount:0};
+  const board = state.leaderboard || [];
+  const p = state.profile || {};
+  return `
+  <div class="content-app">
+    <div class="dash-header">
+      <div class="dash-avatar">${(p.displayName||'?')[0]}</div>
+      <h2 style="margin:0;">${p.displayName || ''}</h2>
+      <div class="points-big">${s.points} PeerPoints</div>
+    </div>
+    <div style="display:flex; gap:10px; margin:16px 0 22px;">
+      <div class="stat-mini"><div class="num">${s.explanationsCount}</div><div class="lbl">💡 شروحات</div></div>
+      <div class="stat-mini"><div class="num">${s.helpedCount}</div><div class="lbl">🤝 ساعدتِ طالبات</div></div>
+      <div class="stat-mini"><div class="num">${s.likesReceived}</div><div class="lbl">⭐ أفادني</div></div>
+    </div>
+    <div class="section-title">🔥 نجوم PeerUp</div>
+    <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
+      ${board.length ? board.map((st,i) => `
+        <div class="list-row" style="cursor:default;">
+          <div style="width:22px; text-align:center; font-weight:700; color:var(--ink-faint); flex-shrink:0;">${i+1}</div>
+          <div style="flex:1; font-weight:700; color:var(--ink);">${st.displayName}${st.uid===p.uid?' (أنتِ)':''}</div>
+          <div style="color:var(--primary); font-weight:700; font-size:12.5px;">${st.points} نقطة</div>
+        </div>`).join('') : `<div class="empty-state">ولا طالبة سجّلت نقاط لسه.</div>`}
+    </div>
+    <button class="link-btn" data-action="logout">تسجيل الخروج</button>
+  </div>`;
+}
+
 /* ---------- teacher views ---------- */
 function viewTeacherHome(){
   const p = state.profile || {};
@@ -705,6 +764,7 @@ function render(){
   if(state.view === 'shareSuccess'){ app.innerHTML = viewShareSuccess() + studentNav(); return; }
   if(state.view === 'askQuestion'){ app.innerHTML = viewAskQuestion() + studentNav(); return; }
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
+  if(state.view === 'achievements'){ app.innerHTML = viewAchievements() + studentNav(); return; }
   if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
   if(state.view === 'teacherReview'){ app.innerHTML = viewTeacherReview() + teacherNav(); return; }
   app.innerHTML = viewLanding();
@@ -752,6 +812,10 @@ document.addEventListener('click', (e) => {
     navigate('askQuestion');
   } else if(action === 'nav-questions-list'){
     openQuestionsList();
+  } else if(action === 'nav-achievements'){
+    openAchievements();
+  } else if(action === 'like-post'){
+    handleLikePost(el.dataset.id);
   } else if(action === 'pick-type'){
     setState({postType: el.dataset.type});
   } else if(action === 'submit-post'){
