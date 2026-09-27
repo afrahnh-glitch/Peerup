@@ -456,6 +456,7 @@ function viewStudentHome(){
         <span class="emoji">📭</span>
         المحتوى لسه ما تهيّأ. اطلبي من معلمتك تسجل دخولها وتضغط زر "تهيئة المحتوى" من لوحتها.
       </div>`}
+      <button class="link-btn" data-action="logout">تسجيل الخروج</button>
     </div>
   </div>`;
 }
