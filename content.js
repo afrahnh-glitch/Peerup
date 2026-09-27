@@ -95,6 +95,14 @@ export async function createQuestion(db, {lessonId, subjectId, studentUid, stude
   return docRef.id;
 }
 
+export async function createAnswer(db, {questionId, studentUid, studentName, text}){
+  const docRef = await addDoc(collection(db, 'answers'), {
+    questionId, studentUid, studentName, text,
+    createdAt: serverTimestamp(), createdAtMs: Date.now(),
+  });
+  return docRef.id;
+}
+
 export async function fetchAnswersForQuestion(db, questionId){
   const q = query(collection(db, 'answers'), where('questionId', '==', questionId));
   const snap = await getDocs(q);
@@ -117,12 +125,16 @@ export async function fetchQuestionsWithAnswers(db, lessonId){
   return questions;
 }
 
-export async function createAnswer(db, {questionId, studentUid, studentName, text}){
-  const docRef = await addDoc(collection(db, 'answers'), {
-    questionId, studentUid, studentName, text,
-    createdAt: serverTimestamp(), createdAtMs: Date.now(),
-  });
-  return docRef.id;
+export async function fetchPostsByStudent(db, uid){
+  const q = query(collection(db, 'posts'), where('studentUid', '==', uid));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({id: d.id, ...d.data()}));
+}
+
+export async function fetchAnswersByStudent(db, uid){
+  const q = query(collection(db, 'answers'), where('studentUid', '==', uid));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({id: d.id, ...d.data()}));
 }
 
 /* ================= المرحلة 4: مراجعة المعلمة ================= */
@@ -145,4 +157,74 @@ export async function rejectPost(db, postId){
 }
 export async function deletePost(db, postId){
   await deleteDoc(doc(db, 'posts', postId));
+}
+
+/* ================= المرحلة 5: أفادني + PeerPoints ================= */
+
+// نعتمد على مستند تفاعل ثابت المعرّف (postId_uid) بدل عدّاد قابل للتعديل،
+// عشان تستحيل الطالبة تضغط "أفادني" أكثر من مرة على نفس المشاركة —
+// حتى لو حاولت تتلاعب بالطلب مباشرة، قواعد Firestore ترفض إنشاء نفس المعرّف مرتين.
+export async function hasLiked(db, postId, uid){
+  const snap = await getDoc(doc(db, 'interactions', `${postId}_${uid}`));
+  return snap.exists();
+}
+export async function getLikesCount(db, postId){
+  const q = query(collection(db, 'interactions'), where('postId', '==', postId));
+  const snap = await getDocs(q);
+  return snap.size;
+}
+export async function likePost(db, postId, uid){
+  await setDoc(doc(db, 'interactions', `${postId}_${uid}`), {
+    postId, studentUid: uid, createdAt: serverTimestamp(),
+  });
+}
+export async function attachLikeInfo(db, posts, uid){
+  return Promise.all(posts.map(async (p) => {
+    const [likedByMe, likesCount] = await Promise.all([
+      hasLiked(db, p.id, uid), getLikesCount(db, p.id),
+    ]);
+    return {...p, likedByMe, likesCount};
+  }));
+}
+
+// نحسب PeerPoints مباشرة من البيانات الحقيقية بدل تخزينها كرقم قابل للتعديل:
+// شرح معتمد = 10، إجابة = 5، كل "أفادني" استلمتها على شرح معتمد = 2.
+export async function computeStudentPoints(db, uid){
+  const [myPosts, myAnswers] = await Promise.all([
+    fetchPostsByStudent(db, uid),
+    fetchAnswersByStudent(db, uid),
+  ]);
+  const approvedPosts = myPosts.filter(p => p.status === 'approved');
+  const likeCounts = await Promise.all(approvedPosts.map(p => getLikesCount(db, p.id)));
+  const likesReceived = likeCounts.reduce((s, n) => s + n, 0);
+
+  const questionIds = [...new Set(myAnswers.map(a => a.questionId))];
+  const questionSnaps = await Promise.all(questionIds.map(qid => getDoc(doc(db, 'questions', qid))));
+  const helped = new Set();
+  questionSnaps.forEach(snap => {
+    if(snap.exists()){
+      const q = snap.data();
+      if(q.studentUid !== uid) helped.add(q.studentUid);
+    }
+  });
+
+  return {
+    points: approvedPosts.length * 10 + myAnswers.length * 5 + likesReceived * 2,
+    explanationsCount: approvedPosts.length,
+    answersCount: myAnswers.length,
+    likesReceived,
+    helpedCount: helped.size,
+  };
+}
+
+// لوحة المتصدرين: كل الطالبات مع نقاطهن، الأعلى أول. (تراكمية حاليًا،
+// وليست بحساب أسبوعي منفصل — تبسيط مقصود بهذي المرحلة.)
+export async function fetchLeaderboard(db, limitN){
+  const q = query(collection(db, 'users'), where('role', '==', 'student'));
+  const snap = await getDocs(q);
+  const students = snap.docs.map(d => ({uid: d.id, displayName: d.data().displayName}));
+  const withPoints = await Promise.all(students.map(async (s) => ({
+    ...s, ...(await computeStudentPoints(db, s.uid)),
+  })));
+  return withPoints.sort((a, b) => b.points - a.points).slice(0, limitN || 5);
 }
