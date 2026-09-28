@@ -362,6 +362,128 @@ export function mmThumbSvg(data){
   return s + '</svg>';
 }
 
+
+/* ==================================================================
+   تنسيق المحرر: يُحقَن من هذا الملف نفسه كي لا يعتمد على styles.css
+   (تحديث/كاش ملف آخر كان يجعل المحرر يظهر خامًا أسفل الصفحة).
+   ألوان PeerUp مكتوبة صراحة، و --shell-w يُؤخذ من التطبيق مع قيمة بديلة.
+   ================================================================== */
+const MM_CSS = `
+body.mm-open{overflow:hidden;}
+
+/* --- معاينة داخل النموذج وبطاقات المشاركات --- */
+.mm-preview{display:flex; flex-direction:column; gap:10px;}
+.mm-preview-card{
+  background:radial-gradient(260px 160px at 80% 0%, rgba(101,199,255,.14), transparent 70%), #FAFAFC;
+  border:1.5px solid #EAE7F7; border-radius:18px; padding:8px 8px 0; margin:10px 0 4px;
+  overflow:hidden; cursor:pointer; transition:transform .15s ease, box-shadow .15s ease;
+}
+.mm-preview .mm-preview-card{margin:0;}
+.mm-preview-card:hover{transform:translateY(-1px); box-shadow:0 12px 26px -16px rgba(124,92,252,.4);}
+.mm-thumb{display:block; width:100%; height:auto; max-height:230px;}
+.mm-thumb text{font-family:'Tajawal',sans-serif; direction:rtl;}
+.mm-preview-cap{margin:6px -8px 0; padding:9px 12px; text-align:center; font-size:12px; font-weight:700; color:#7C5CFC; background:#E9D5FF;}
+.mm-preview-actions{display:flex; gap:8px; align-items:center;}
+.mm-preview-actions .btn{flex:1;}
+.mm-empty{
+  display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center;
+  padding:18px 14px; border:1.6px dashed #EAE7F7; border-radius:18px; color:#7B8190; font-size:12.8px; line-height:1.7;
+  background:radial-gradient(200px 110px at 50% 0%, rgba(124,92,252,.07), transparent 70%);
+}
+.mm-empty-planet{font-size:30px; line-height:1;}
+
+/* --- المحرر: طبقة فوق التطبيق، بعرض حاوية التطبيق (.shell) وليس النافذة كلها --- */
+.mm-root{
+  position:fixed; top:0; bottom:0; left:0; right:0; margin:0 auto;
+  width:100%; max-width:var(--shell-w,440px); box-sizing:border-box; z-index:300;
+  display:flex; flex-direction:column; overflow:hidden;
+  background:radial-gradient(700px 420px at 85% -5%, rgba(101,199,255,.16), transparent 62%),
+             radial-gradient(560px 360px at -8% 12%, rgba(233,213,255,.55), transparent 62%), #FAFAFC;
+  color:#172033; font-family:'Tajawal',-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;
+  padding-top:env(safe-area-inset-top);
+}
+@media(min-width:700px){
+  /* يطابق إطار التطبيق على الآيباد/الكمبيوتر (هامش 24px + زوايا مدوّرة) */
+  .mm-root{top:24px; bottom:24px; padding-top:0; border-radius:26px; border:1px solid #EAE7F7; box-shadow:0 24px 60px -24px rgba(23,37,84,.35);}
+}
+.mm-root *{box-sizing:border-box;}
+.mm-root [hidden]{display:none !important;}
+.mm-topbar{display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(255,255,255,.92); border-bottom:1px solid #EAE7F7;}
+.mm-title{flex:1; min-width:0; font-family:'El Messiri','Tajawal',sans-serif; font-weight:700; font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.mm-tools{display:flex; flex-wrap:wrap; justify-content:center; gap:6px; padding:8px 10px; background:rgba(255,255,255,.72); border-bottom:1px solid #EAE7F7;}
+.mm-btn{
+  flex-shrink:0; min-width:42px; height:40px; padding:0 12px; border-radius:12px; font-family:inherit;
+  border:1.5px solid #EAE7F7; background:#fff; color:#172033; font-weight:700; font-size:13px; white-space:nowrap;
+  cursor:pointer; transition:transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+}
+.mm-btn:active{transform:scale(.97);}
+.mm-btn:disabled{opacity:.38; pointer-events:none;}
+.mm-btn.mm-primary{background:linear-gradient(120deg,#7C5CFC 0%,#8F72FD 100%); color:#fff; border-color:transparent; box-shadow:0 8px 18px -10px rgba(124,92,252,.6);}
+.mm-btn.mm-back{width:40px; padding:0; font-size:18px;}
+.mm-btn.mm-danger{color:#C6553D; border-color:#F1CFC7; background:#FBEAE4;}
+.mm-btn.mm-danger-solid{background:#C6553D; color:#fff; border-color:transparent;}
+
+/* مساحة الرسم: تملأ المتبقي من ارتفاع المحرر (لا أبعاد ثابتة) */
+.mm-viewport{
+  position:relative; flex:1 1 auto; min-height:0; width:100%; overflow:hidden; touch-action:none; cursor:grab;
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+}
+.mm-viewport:active{cursor:grabbing;}
+.mm-world{position:absolute; left:0; top:0; width:0; height:0; transform-origin:0 0; direction:ltr; will-change:transform;}
+.mm-edges{position:absolute; left:0; top:0; overflow:visible; pointer-events:none;}
+.mm-edge{opacity:.9;}
+
+.mm-node{
+  position:absolute; transform:translate(-50%,-50%); box-sizing:border-box; display:flex;
+  align-items:center; justify-content:center; text-align:center; direction:rtl;
+  padding:8px 12px; font-size:13px; line-height:1.45; cursor:pointer; transition:box-shadow .15s ease;
+}
+.mm-text{pointer-events:none; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word;}
+/* الفكرة الرئيسية: كوكب واضح بحلقة مدارية خلفه */
+.mm-rootnode{width:132px; height:132px; border-radius:50%; padding:16px; isolation:isolate; font-weight:800; color:#fff; box-shadow:0 18px 38px -14px rgba(124,92,252,.65);}
+.mm-rootnode .mm-text{-webkit-line-clamp:5;}
+.mm-rootnode::after{content:""; position:absolute; top:0; right:0; bottom:0; left:0; border-radius:50%; z-index:-1; pointer-events:none; background:radial-gradient(circle at 32% 26%, #B9A2FF 0%, #7C5CFC 58%, #5B3FD8 100%);}
+.mm-rootnode::before{content:""; position:absolute; left:50%; top:50%; width:186%; height:44%; z-index:-2; pointer-events:none; transform:translate(-50%,-50%) rotate(-14deg); border:2px solid rgba(101,199,255,.7); border-radius:50%;}
+/* الفروع: بطاقات أنيقة بلون فرعها */
+.mm-l1{width:150px; border-radius:16px; background:var(--s,#EFE8FF); border:1.6px solid var(--c,#7C5CFC); font-weight:700; box-shadow:0 8px 18px -12px rgba(23,37,84,.4);}
+.mm-l2{width:140px; border-radius:14px; background:#fff; border:1.4px solid var(--c,#7C5CFC); font-weight:500; box-shadow:0 6px 14px -10px rgba(23,37,84,.3);}
+.mm-node.selected{box-shadow:0 0 0 3px rgba(124,92,252,.38), 0 10px 22px -12px rgba(23,37,84,.45);}
+.mm-rootnode.selected{box-shadow:0 0 0 4px rgba(124,92,252,.35), 0 18px 38px -14px rgba(124,92,252,.65);}
+
+.mm-editbox{
+  position:absolute; z-index:5; height:44px; padding:0 12px; text-align:center; direction:rtl;
+  font-family:inherit; font-size:16px; font-weight:700; color:#172033;
+  border:2px solid #7C5CFC; border-radius:14px; background:#fff; box-shadow:0 12px 28px -12px rgba(124,92,252,.55); outline:none;
+}
+.mm-hint{position:absolute; left:16px; right:16px; bottom:14px; text-align:center; font-size:12.5px; line-height:1.7; color:#7B8190; pointer-events:none;}
+
+/* شريط أدوات التحرير داخل المحرر: 3 أزرار بالصف على الهاتف، وصف واحد على الشاشات الأوسع */
+.mm-bottombar{
+  display:flex; flex-wrap:wrap; gap:8px; padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+  background:rgba(255,255,255,.95); border-top:1px solid #EAE7F7; box-shadow:0 -10px 24px -18px rgba(23,37,84,.3);
+}
+.mm-bottombar .mm-btn{flex:1 1 calc(33.333% - 8px); height:auto; min-height:46px; padding:8px 6px; font-size:13.5px;}
+@media(min-width:560px){ .mm-bottombar .mm-btn{flex:1 1 0;} }
+.mm-confirm{position:absolute; top:0; right:0; bottom:0; left:0; z-index:10; display:flex; align-items:center; justify-content:center; padding:22px; background:rgba(23,32,51,.45);}
+.mm-confirm-box{width:100%; max-width:340px; background:#fff; border-radius:22px; padding:20px 18px 16px; box-shadow:0 24px 50px -18px rgba(0,0,0,.45);}
+.mm-confirm-msg{font-size:14px; font-weight:700; line-height:1.8; margin-bottom:16px; text-align:center;}
+.mm-confirm-row{display:flex; gap:10px;}
+.mm-confirm-row .mm-btn{flex:1;}
+.mm-toast{position:absolute; left:50%; bottom:96px; transform:translateX(-50%); z-index:12; background:#172554; color:#fff; padding:10px 16px; border-radius:14px; font-size:12.5px; font-weight:600; max-width:88%; text-align:center; box-shadow:0 14px 28px -12px rgba(0,0,0,.5);}
+@media(prefers-reduced-motion:reduce){.mm-btn,.mm-node,.mm-preview-card{transition:none;}}
+`;
+
+let mmStylesDone = false;
+export function mmEnsureStyles(){
+  if(mmStylesDone || typeof document === 'undefined' || !document.createElement) return;
+  if(document.querySelector && document.querySelector('style#mm-styles')){ mmStylesDone = true; return; }
+  const st = document.createElement('style');
+  st.setAttribute('id', 'mm-styles');
+  st.textContent = MM_CSS;
+  (document.head || document.documentElement || document.body).appendChild(st);
+  mmStylesDone = true;
+}
+
 /* ================================================================ المحرر */
 function h(tag, props, kids){
   const e = document.createElement(tag);
@@ -423,6 +545,7 @@ export class MindMapEditor {
     this.btns = {};
     this.root = h('div', {class: 'mm-root', dir: 'rtl'});
     const top = h('div', {class: 'mm-topbar'}, [
+      this._mk('back', '←', 'mm-back', 'رجوع'),
       h('div', {class: 'mm-title', text: this.o.title || 'الخريطة الذهنية'}),
       this._mk('close', ro ? 'إغلاق' : 'تم ✓', 'mm-primary'),
     ]);
@@ -440,11 +563,12 @@ export class MindMapEditor {
     this.edges.setAttribute('class', 'mm-edges');
     this.edges.setAttribute('width', '1');
     this.edges.setAttribute('height', '1');
+    this.edges.appendChild(this._deco());
     this.world.appendChild(this.edges);
     this.vp.appendChild(this.world);
     this.editBox = h('input', {class: 'mm-editbox', type: 'text', maxlength: String(MM_MAX_TEXT), dir: 'rtl', 'aria-label': 'نص العقدة'});
     this.editBox.hidden = true;
-    this.hint = h('div', {class: 'mm-hint', text: 'اختاري الفكرة الرئيسية ثم اضغطي «فرع رئيسي» لإضافة أول فرع.'});
+    this.hint = h('div', {class: 'mm-hint', text: 'اضغطي «فرع رئيسي» لإضافة أول فرع، ثم اختاري أي عقدة واضغطي «فرع فرعي».'});
     this.hint.hidden = true;
     this.vp.appendChild(this.editBox);
     this.vp.appendChild(this.hint);
@@ -452,7 +576,8 @@ export class MindMapEditor {
     const parts = [top, tools, this.vp];
     if(!ro){
       parts.push(h('div', {class: 'mm-bottombar'}, [
-        this._mk('add-child', '➕ فرع رئيسي', 'mm-primary'),
+        this._mk('add-main', '➕ فرع رئيسي', 'mm-primary'),
+        this._mk('add-child', '➕ فرع فرعي', 'mm-primary'),
         this._mk('add-sibling', '➕ فرع مجاور'),
         this._mk('edit', '✏️ تعديل النص'),
         this._mk('delete', '🗑️ حذف', 'mm-danger'),
@@ -469,8 +594,30 @@ export class MindMapEditor {
     this.toastEl.hidden = true;
     parts.push(this.confirmEl, this.toastEl);
     parts.forEach(p => this.root.appendChild(p));
-    document.body.appendChild(this.root);
+    mmEnsureStyles();
+    // داخل حاوية التطبيق (.shell) لا على body، فيبقى ضمن حدود PeerUp
+    const host = (document.querySelector && document.querySelector('.shell')) || document.body;
+    host.appendChild(this.root);
     document.body.classList.add('mm-open');
+  }
+  _deco(){
+    const g = document.createElementNS(SVGNS, 'g');
+    g.setAttribute('class', 'mm-deco');
+    [[150, '#CDBBFF', '.55'], [238, '#A9DCFA', '.45']].forEach(([r, c, o]) => {
+      const ci = document.createElementNS(SVGNS, 'circle');
+      ci.setAttribute('cx', '0'); ci.setAttribute('cy', '0'); ci.setAttribute('r', String(r));
+      ci.setAttribute('fill', 'none'); ci.setAttribute('stroke', c); ci.setAttribute('stroke-width', '1.3');
+      ci.setAttribute('stroke-dasharray', '3 7'); ci.setAttribute('opacity', o);
+      g.appendChild(ci);
+    });
+    [[-340, -200, 7, '#65C7FF'], [310, -240, 5, '#B79BFF'], [-280, 230, 6, '#B79BFF'], [350, 190, 7, '#65C7FF'], [30, -310, 5, '#7DDBB8']]
+      .forEach(([x, y, sz, c]) => {
+        const p = document.createElementNS(SVGNS, 'path'), k = sz * 0.28;
+        p.setAttribute('d', `M0 ${-sz} L${k} ${-k} L${sz} 0 L${k} ${k} L0 ${sz} L${-k} ${k} L${-sz} 0 L${-k} ${-k}Z`);
+        p.setAttribute('transform', `translate(${x} ${y})`); p.setAttribute('fill', c); p.setAttribute('opacity', '.85');
+        g.appendChild(p);
+      });
+    return g;
   }
   _bind(){
     const vp = this.vp;
@@ -491,6 +638,14 @@ export class MindMapEditor {
       else if(e.key === 'Escape'){ e.preventDefault(); this._cancelEdit(); }
     });
     this.editBox.addEventListener('blur', () => this._commitEdit());
+    // يتابع حجم الحاوية (دوران الآيباد، تغيّر الشريط...) ويعيد التمركز تلقائيًا
+    if(typeof ResizeObserver !== 'undefined'){
+      this._ro = new ResizeObserver(() => {
+        if(this.destroyed) return;
+        if(this.autoFit) this.fit(); else this._applyView();
+      });
+      this._ro.observe(this.vp);
+    }
     this._kd = e => this._onKey(e);
     this._rs = () => { if(this.autoFit && !this.destroyed) this.fit(); };
     document.addEventListener('keydown', this._kd);
@@ -537,7 +692,7 @@ export class MindMapEditor {
         path.setAttribute('class', 'mm-edge');
         path.setAttribute('fill', 'none');
         path.setAttribute('stroke', col.c);
-        path.setAttribute('stroke-width', d === 1 ? '3' : d === 2 ? '2.2' : '1.8');
+        path.setAttribute('stroke-width', d === 1 ? '3.4' : d === 2 ? '2.6' : '2');
         path.setAttribute('stroke-linecap', 'round');
         this.edges.appendChild(path);
         this.edgeEls.set(n.id, path);
@@ -592,7 +747,7 @@ export class MindMapEditor {
     if(this.readOnly) return;
     const isRoot = this.selectedId === this.model.rootId();
     const full = this.model.nodes.length >= MM_MAX_NODES;
-    this.btns['add-child'].textContent = isRoot ? '➕ فرع رئيسي' : '➕ فرع فرعي';
+    this.btns['add-main'].disabled = full;
     this.btns['add-child'].disabled = full;
     this.btns['add-sibling'].disabled = isRoot || full;
     this.btns['delete'].disabled = isRoot;
@@ -617,6 +772,7 @@ export class MindMapEditor {
   _action(key){
     if(this.destroyed) return;
     switch(key){
+      case 'back':
       case 'close': return this._close();
       case 'zoomin': return this._zoom(1.25);
       case 'zoomout': return this._zoom(0.8);
@@ -624,8 +780,9 @@ export class MindMapEditor {
       case 'undo': return this._history(this.model.undo());
       case 'redo': return this._history(this.model.redo());
       case 'layout': return this._autoLayout();
-      case 'add-child': return this._add(false);
-      case 'add-sibling': return this._add(true);
+      case 'add-main': return this._add('main');
+      case 'add-child': return this._add('child');
+      case 'add-sibling': return this._add('sibling');
       case 'edit': return this.startEdit(this.selectedId);
       case 'delete': return this._askDelete();
       case 'cancel-delete': this.confirmEl.hidden = true; this.pendingDelete = null; return;
@@ -646,9 +803,11 @@ export class MindMapEditor {
     else this._toast('الخريطة مرتبة بالفعل');
     this.fit();
   }
-  _add(sibling){
+  // main: فرع رئيسي من الفكرة الرئيسية دائمًا | child: فرع من العقدة المحددة | sibling: بجوارها
+  _add(mode){
     if(this.model.nodes.length >= MM_MAX_NODES){ this._toast(`وصلتِ للحد الأقصى (${MM_MAX_NODES} عقدة).`); return; }
-    const id = sibling ? this.model.addSibling(this.selectedId) : this.model.addChild(this.selectedId);
+    const id = mode === 'sibling' ? this.model.addSibling(this.selectedId)
+             : this.model.addChild(mode === 'main' ? this.model.rootId() : this.selectedId);
     if(!id) return;
     this.selectedId = id;
     this._sync();
@@ -824,9 +983,12 @@ export class MindMapEditor {
     this.destroyed = true;
     clearTimeout(this.tapTimer);
     clearTimeout(this.toastTimer);
+    if(this._ro) this._ro.disconnect();
     document.removeEventListener('keydown', this._kd);
     if(typeof window !== 'undefined') window.removeEventListener('resize', this._rs);
     this.root.remove();
     document.body.classList.remove('mm-open');
   }
 }
+
+mmEnsureStyles();
