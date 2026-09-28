@@ -14,6 +14,9 @@ import {
   fetchPendingPosts, approvePost, rejectPost, deletePost,
   attachLikeInfo, likePost, computeStudentPoints, fetchLeaderboard,
 } from "./content.js";
+import {
+  MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc,
+} from "./mindmap.js";
 
 const POST_TYPES = {
   quick:   {emoji: '📝', label: 'شرح سريع'},
@@ -53,86 +56,86 @@ const state = {
 
 function setState(patch){ Object.assign(state, patch); render(); }
 
-/* ---------- خريطة ذهنية بسيطة: أشكال جاهزة تُضاف بالضغط، قابلة للسحب
-   وفيها نص قابل للتعديل بداخلها. تُخزَّن كبيانات صغيرة داخل Firestore
-   نفسه (بدون صور وبدون Storage). ---------- */
-const MAP_W = 300, MAP_H = 260;
-let mapShapes = [];       // [{id, type:'circle'|'rect', x, y, text, color}]
-let mapShapeSeq = 1;
-let mapColor = '#7C5CFC';
-let selectedShapeId = null;
-let shapeDrag = null;      // {id, startClientX, startClientY, origX, origY}
+/* ---------- خريطة ذهنية: محرر حقيقي بملء الشاشة (mindmap.js) ----------
+   الخريطة تُحفظ كبيانات منظّمة (عقد + علاقات + إحداثيات) داخل مستند المشاركة
+   نفسه في Firestore — بدون صور، بدون Storage، بدون اشتراك مدفوع. */
+let mapDoc = null;   // الخريطة الجاري بناؤها؛ تبقى بالذاكرة أثناء كتابة المشاركة
+let mmOpen = null;   // المحرر المفتوح حاليًا (إن وُجد)
 
-function renderMapCanvas(){
-  const canvas = document.getElementById('mapCanvas');
-  if(!canvas) return;
-  canvas.innerHTML = mapShapes.map(s => `
-    <div class="map-shape map-shape-${s.type} ${s.id===selectedShapeId?'selected':''}"
-         data-shape-id="${s.id}" style="left:${(s.x/MAP_W*100)}%; top:${(s.y/MAP_H*100)}%; background:${s.color};">
-      ${s.id===selectedShapeId ? `<span class="shape-handle" data-action="drag-shape-handle" data-shape-id="${s.id}">⠿</span>` : ''}
-      ${s.id===selectedShapeId ? `<span class="shape-delete" data-action="delete-shape-one" data-shape-id="${s.id}">✕</span>` : ''}
-      <div class="shape-text" contenteditable="true" data-shape-id="${s.id}">${s.text || ''}</div>
-    </div>`).join('');
+function currentPostLessonTitle(){
+  const sel = document.getElementById('postLesson');
+  return lessonTitleById((sel && sel.value) || state.shareLessonId);
 }
-function addMapShape(type){
-  const n = mapShapes.length;
-  const x = 60 + (n % 4) * 55;
-  const y = 50 + Math.floor(n / 4) * 60;
-  const id = mapShapeSeq++;
-  mapShapes.push({id, type, x, y, text:'', color: mapColor});
-  selectedShapeId = id;
-  renderMapCanvas();
-  const el = document.querySelector(`.shape-text[data-shape-id="${id}"]`);
-  if(el) el.focus();
+function renderMapPreview(){
+  const box = document.getElementById('mapPreview');
+  if(!box) return;
+  if(mapDoc && mmNodeCount(mapDoc) > 1){
+    const data = mmSerialize(mapDoc);
+    box.innerHTML = `
+      <div class="mm-preview-card" data-action="open-mindmap">
+        ${mmThumbSvg(data)}
+        <div class="mm-preview-cap">🧠 ${data.nodes.length} عقدة — اضغطي للتعديل</div>
+      </div>
+      <div class="mm-preview-actions">
+        <button type="button" class="btn btn-primary" data-action="open-mindmap">✏️ تعديل الخريطة</button>
+        <button type="button" class="pill-btn" data-action="clear-mindmap">🗑️ مسح الخريطة</button>
+      </div>`;
+  } else {
+    box.innerHTML = `
+      <div class="mm-empty">
+        <div class="mm-empty-planet">🪐</div>
+        <div>ابني خريطة للدرس: فكرة رئيسية في المنتصف، فروع، وفروع فرعية مرتبطة بها.</div>
+      </div>
+      <button type="button" class="btn btn-primary" data-action="open-mindmap">🧠 افتحي محرر الخريطة</button>`;
+  }
 }
-function setupMapCanvas(){
-  const canvas = document.getElementById('mapCanvas');
-  if(!canvas) return;
-  renderMapCanvas();
-
-  canvas.addEventListener('click', (e) => {
-    if(e.target.closest('.shape-delete') || e.target.closest('.shape-handle')) return;
-    const shapeEl = e.target.closest('.map-shape');
-    if(!shapeEl) return;
-    const id = Number(shapeEl.dataset.shapeId);
-    if(selectedShapeId !== id){ selectedShapeId = id; renderMapCanvas(); }
-  });
-
-  canvas.addEventListener('input', (e) => {
-    if(!e.target.classList.contains('shape-text')) return;
-    const id = Number(e.target.dataset.shapeId);
-    const s = mapShapes.find(sh => sh.id === id);
-    if(s) s.text = e.target.textContent;
-  });
-
-  canvas.addEventListener('pointerdown', (e) => {
-    const handle = e.target.closest('[data-action="drag-shape-handle"]');
-    if(!handle) return;
-    e.preventDefault();
-    const id = Number(handle.dataset.shapeId);
-    const s = mapShapes.find(sh => sh.id === id);
-    if(!s) return;
-    shapeDrag = {id, startClientX: e.clientX, startClientY: e.clientY, origX: s.x, origY: s.y, canvas};
+function openMapEditor(){
+  if(mmOpen) return;
+  mmOpen = new MindMapEditor({
+    doc: mapDoc,
+    defaultTitle: currentPostLessonTitle(),
+    title: 'خريطتي الذهنية',
+    onChange: (d) => { mapDoc = d; },
+    onClose: (d) => {
+      mapDoc = (d && mmNodeCount(d) > 1) ? d : null;
+      mmOpen = null;
+      renderMapPreview();
+    },
   });
 }
-window.addEventListener('pointermove', (e) => {
-  if(!shapeDrag) return;
-  const s = mapShapes.find(sh => sh.id === shapeDrag.id);
-  if(!s) return;
-  const rect = shapeDrag.canvas.getBoundingClientRect();
-  const dx = (e.clientX - shapeDrag.startClientX) / rect.width * MAP_W;
-  const dy = (e.clientY - shapeDrag.startClientY) / rect.height * MAP_H;
-  s.x = Math.max(0, Math.min(MAP_W, shapeDrag.origX + dx));
-  s.y = Math.max(0, Math.min(MAP_H, shapeDrag.origY + dy));
-  renderMapCanvas();
-});
-window.addEventListener('pointerup', () => { shapeDrag = null; });
+function openMapViewer(postId){
+  if(mmOpen) return;
+  const post = (state.posts || []).find(p => p.id === postId)
+            || (state.pendingPosts || []).find(p => p.id === postId);
+  if(!post || !post.mindMap) return;
+  mmOpen = new MindMapEditor({
+    readOnly: true, data: post.mindMap, title: 'خريطة ' + (post.studentName || ''),
+    onClose: () => { mmOpen = null; },
+  });
+}
+// معاينة الخريطة داخل بطاقة المشاركة (للطالبات وللمعلمة قبل الاعتماد)
+function mindMapBlock(p){
+  const mm = p.mindMap;
+  if(mm && Array.isArray(mm.nodes) && mm.nodes.length > 1){
+    const svg = mmThumbSvg(mm);
+    if(svg){
+      return `
+      <div class="mm-preview-card" data-action="view-mindmap" data-id="${p.id}">
+        ${svg}
+        <div class="mm-preview-cap">🔍 خريطة ذهنية · ${Math.min(mm.nodes.length, 40)} عقدة — اضغطي للعرض الكامل</div>
+      </div>`;
+    }
+  }
+  return p.shapesData && p.shapesData.length ? renderShapesMap(p.shapesData) : '';
+}
 
+/* مشاركات قديمة أُنشئت بمحرر الأشكال السابق: تبقى قابلة للعرض فقط */
+const LEGACY_W = 300, LEGACY_H = 260;
 function renderShapesMap(shapes){
   if(!shapes || !shapes.length) return '';
   const items = shapes.map(s => `
-    <div class="map-shape map-shape-${s.type}" style="left:${(s.x/MAP_W*100)}%; top:${(s.y/MAP_H*100)}%; background:${s.color};">
-      <div class="shape-text">${s.text || ''}</div>
+    <div class="map-shape map-shape-${s.type === 'circle' ? 'circle' : 'rect'}" style="left:${(Number(s.x)/LEGACY_W*100)}%; top:${(Number(s.y)/LEGACY_H*100)}%; background:${/^#[0-9a-fA-F]{3,8}$/.test(s.color) ? s.color : '#7C5CFC'};">
+      <div class="shape-text">${mmEsc(s.text || '')}</div>
     </div>`).join('');
   return `<div class="map-canvas map-canvas-view">${items}</div>`;
 }
@@ -295,6 +298,8 @@ async function handleSubmitPost(){
   const lessonId = document.getElementById('postLesson').value;
   const content = document.getElementById('postContent').value.trim();
   if(!content){ showToast('اكتبي شرحك قبل الإرسال'); return; }
+  const mindMap = (mapDoc && mmNodeCount(mapDoc) > 1) ? mmSerialize(mapDoc) : null;
+  if(mindMap && JSON.stringify(mindMap).length > 60000){ showToast('الخريطة كبيرة جدًا، قلّلي عدد العقد.'); return; }
   setState({loading:true});
   try{
     const lesson = (state.lessons || []).find(l => l.id === lessonId);
@@ -306,10 +311,9 @@ async function handleSubmitPost(){
       type: state.postType,
       title: '',
       content,
-      shapesData: mapShapes,
+      mindMap,
     });
-    mapShapes = [];
-    selectedShapeId = null;
+    mapDoc = null;
     setState({loading:false});
     navigate('shareSuccess');
   }catch(err){
@@ -609,7 +613,7 @@ function postCard(p){
       ${pending ? `<span class="pending-tag">⏳ بانتظار الاعتماد</span>` : ''}
     </div>
     <div class="p-body">${p.content}</div>
-    ${p.shapesData && p.shapesData.length ? renderShapesMap(p.shapesData) : ''}
+    ${mindMapBlock(p)}
     ${!pending ? `
     <div style="margin-top:11px;">
       <button class="pill-btn ${p.likedByMe?'liked':''}" data-action="like-post" data-id="${p.id}" ${p.likedByMe||isMine?'disabled':''}>
@@ -681,15 +685,9 @@ function viewSharePost(){
       <textarea id="postContent" placeholder="اكتبي شرحك هنا..."></textarea>
     </div>
     <div class="field">
-      <label>أضيفي خريطة ذهنية بسيطة (اختياري)</label>
-      <div class="shape-toolbar">
-        <button type="button" class="tool-btn" data-action="add-shape" data-type="circle">⭕ دائرة</button>
-        <button type="button" class="tool-btn" data-action="add-shape" data-type="rect">▭ مستطيل</button>
-        ${['#7C5CFC','#65C7FF','#2FAF86','#E2924B','#172033'].map(c => `
-          <button type="button" class="swatch ${c===mapColor?'selected':''}" data-action="pick-shape-color" data-color="${c}" style="background:${c}"></button>`).join('')}
-      </div>
-      <div id="mapCanvas" class="map-canvas"></div>
-      <div class="hint">اضغطي "دائرة" أو "مستطيل" لإضافة شكل، اكتبي بداخله، واسحبيه من المقبض ⠿ لتحريكه. اضغطي × لحذفه.</div>
+      <label>خريطة ذهنية للدرس (اختياري)</label>
+      <div id="mapPreview" class="mm-preview"></div>
+      <div class="hint">تُرسل مع شرحك للمعلمة، وتظهر لزميلاتك بعد الاعتماد.</div>
     </div>
     <button class="btn btn-primary" data-action="submit-post" ${state.loading?'disabled':''}>${state.loading?'جارِ الإرسال...':'إرسال للمعلمة'}</button>
   </div>`;
@@ -828,6 +826,7 @@ function pendingPostCard(p){
       </div>
     </div>
     <div class="p-body" style="margin-bottom:12px;">${p.content}</div>
+    ${mindMapBlock(p)}
     <div style="display:flex; gap:8px;">
       <button class="btn btn-primary" style="width:auto; flex:1;" data-action="approve-post" data-id="${p.id}">✓ اعتماد</button>
       <button class="btn" style="width:auto; flex:1; background:var(--surface); border:1.5px solid var(--border); color:var(--ink);" data-action="reject-post" data-id="${p.id}">✕ رفض</button>
@@ -860,7 +859,7 @@ function render(){
   if(state.view === 'studentHome'){ app.innerHTML = viewStudentHome() + studentNav(); return; }
   if(state.view === 'subjectLessons'){ app.innerHTML = viewSubjectLessons() + studentNav(); return; }
   if(state.view === 'lessonDetail'){ app.innerHTML = viewLessonDetail() + studentNav(); return; }
-  if(state.view === 'sharePost'){ app.innerHTML = viewSharePost() + studentNav(); setupMapCanvas(); return; }
+  if(state.view === 'sharePost'){ app.innerHTML = viewSharePost() + studentNav(); renderMapPreview(); return; }
   if(state.view === 'shareSuccess'){ app.innerHTML = viewShareSuccess() + studentNav(); return; }
   if(state.view === 'askQuestion'){ app.innerHTML = viewAskQuestion() + studentNav(); return; }
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
@@ -871,6 +870,13 @@ function render(){
 }
 
 /* ---------- events ---------- */
+document.addEventListener('change', (e) => {
+  if(e.target.id === 'postLesson'){
+    state.shareLessonId = e.target.value;
+    if(mapDoc && mmSetDefaultTitle(mapDoc, lessonTitleById(e.target.value))) renderMapPreview();
+  }
+});
+
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if(!el) return;
@@ -905,25 +911,16 @@ document.addEventListener('click', (e) => {
     runSeed();
   } else if(action === 'nav-share'){
     state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
-    mapShapes = [];
-    selectedShapeId = null;
+    mapDoc = null;
     setState({postType:'quick'});
     navigate('sharePost');
-  } else if(action === 'add-shape'){
-    addMapShape(el.dataset.type);
-  } else if(action === 'pick-shape-color'){
-    mapColor = el.dataset.color;
-    document.querySelectorAll('.shape-toolbar .swatch').forEach(s => s.classList.remove('selected'));
-    el.classList.add('selected');
-    if(selectedShapeId){
-      const s = mapShapes.find(sh => sh.id === selectedShapeId);
-      if(s){ s.color = mapColor; renderMapCanvas(); }
-    }
-  } else if(action === 'delete-shape-one'){
-    const id = Number(el.dataset.shapeId);
-    mapShapes = mapShapes.filter(sh => sh.id !== id);
-    if(selectedShapeId === id) selectedShapeId = null;
-    renderMapCanvas();
+  } else if(action === 'open-mindmap'){
+    openMapEditor();
+  } else if(action === 'clear-mindmap'){
+    mapDoc = null;
+    renderMapPreview();
+  } else if(action === 'view-mindmap'){
+    openMapViewer(el.dataset.id);
   } else if(action === 'nav-ask'){
     state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
     navigate('askQuestion');
