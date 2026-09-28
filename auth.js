@@ -6,7 +6,6 @@ import {
 import {
   getFirestore, doc, getDoc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import { getStorage } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 import { firebaseConfig } from "./firebase-config.js";
 import {
   fetchSubjects, fetchLessons, fetchLesson, seedInitialContent, addLesson,
@@ -14,7 +13,6 @@ import {
   createAnswer, fetchAnswersForQuestion,
   fetchPendingPosts, approvePost, rejectPost, deletePost,
   attachLikeInfo, likePost, computeStudentPoints, fetchLeaderboard,
-  uploadPostImage,
 } from "./content.js";
 
 const POST_TYPES = {
@@ -27,7 +25,6 @@ const POST_TYPES = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app);
 
 /* ---------- state ---------- */
 const state = {
@@ -56,101 +53,88 @@ const state = {
 
 function setState(patch){ Object.assign(state, patch); render(); }
 
-let selectedImageFile = null; // ملف الصورة المختارة لمشاركة حالية (اختياري)
-let drawStrokes = [];         // خطوط الرسم الحرة لخريطة ذهنية (اختياري)
-let currentStroke = null;
-let drawColor = '#7C5CFC';
-let shapeSnapEnabled = true;  // تنسيق هندسي بسيط (دوائر/خطوط) — بدون أي ذكاء اصطناعي
+/* ---------- خريطة ذهنية بسيطة: أشكال جاهزة تُضاف بالضغط، قابلة للسحب
+   وفيها نص قابل للتعديل بداخلها. تُخزَّن كبيانات صغيرة داخل Firestore
+   نفسه (بدون صور وبدون Storage). ---------- */
+const MAP_W = 300, MAP_H = 260;
+let mapShapes = [];       // [{id, type:'circle'|'rect', x, y, text, color}]
+let mapShapeSeq = 1;
+let mapColor = '#7C5CFC';
+let selectedShapeId = null;
+let shapeDrag = null;      // {id, startClientX, startClientY, origX, origY}
 
-function dist(a, b){ return Math.hypot(a[0]-b[0], a[1]-b[1]); }
-
-// تنسيق هندسي بسيط: يتعرف على دائرة تقريبية أو خط شبه مستقيم بحساب
-// رياضي عادي (لا يوجد أي تعرّف بالذكاء الاصطناعي ولا خدمة خارجية).
-// أي شكل غير هذين النمطين (كتابة، خربشة حرة) يبقى كما رسمته الطالبة تمامًا.
-function trySnapShape(stroke){
-  const pts = stroke.points;
-  if(pts.length < 6) return;
-  const start = pts[0], end = pts[pts.length-1];
-  const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
-  const bboxDiag = Math.hypot(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys));
-  if(bboxDiag < 12) return;
-
-  // دائرة: خط شبه مقفول ونصف قطر شبه ثابت عن مركز الثقل
-  if(dist(start, end) < bboxDiag * 0.25){
-    const cx = xs.reduce((a,b)=>a+b,0)/xs.length;
-    const cy = ys.reduce((a,b)=>a+b,0)/ys.length;
-    const radii = pts.map(([x,y]) => Math.hypot(x-cx, y-cy));
-    const avgR = radii.reduce((a,b)=>a+b,0)/radii.length;
-    const stddev = Math.sqrt(radii.reduce((a,b)=>a+(b-avgR)**2,0)/radii.length);
-    if(avgR > 6 && stddev/avgR < 0.3){
-      const steps = 48, newPts = [];
-      for(let i=0;i<=steps;i++){
-        const a = (i/steps) * Math.PI * 2;
-        newPts.push([Math.round(cx+avgR*Math.cos(a)), Math.round(cy+avgR*Math.sin(a))]);
-      }
-      stroke.points = newPts;
-      return;
-    }
-  }
-
-  // خط مستقيم: كل النقاط قريبة جدًا من الخط الواصل بين البداية والنهاية
-  const lineLen = dist(start, end);
-  if(lineLen > 15){
-    const [x1,y1] = start, [x2,y2] = end;
-    const den = Math.hypot(y2-y1, x2-x1) || 1;
-    const maxDev = Math.max(...pts.map(([x,y]) => Math.abs((y2-y1)*x-(x2-x1)*y+x2*y1-y2*x1)/den));
-    if(maxDev < Math.max(6, lineLen*0.06)){
-      stroke.points = [start, end];
-    }
-  }
-}
-
-function redrawCanvas(){
-  const canvas = document.getElementById('drawCanvas');
+function renderMapCanvas(){
+  const canvas = document.getElementById('mapCanvas');
   if(!canvas) return;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawStrokes.forEach(stroke => {
-    if(stroke.points.length < 2) return;
-    ctx.beginPath();
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    stroke.points.forEach(([x,y], i) => { i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); });
-    ctx.stroke();
+  canvas.innerHTML = mapShapes.map(s => `
+    <div class="map-shape map-shape-${s.type} ${s.id===selectedShapeId?'selected':''}"
+         data-shape-id="${s.id}" style="left:${(s.x/MAP_W*100)}%; top:${(s.y/MAP_H*100)}%; background:${s.color};">
+      ${s.id===selectedShapeId ? `<span class="shape-handle" data-action="drag-shape-handle" data-shape-id="${s.id}">⠿</span>` : ''}
+      ${s.id===selectedShapeId ? `<span class="shape-delete" data-action="delete-shape-one" data-shape-id="${s.id}">✕</span>` : ''}
+      <div class="shape-text" contenteditable="true" data-shape-id="${s.id}">${s.text || ''}</div>
+    </div>`).join('');
+}
+function addMapShape(type){
+  const n = mapShapes.length;
+  const x = 60 + (n % 4) * 55;
+  const y = 50 + Math.floor(n / 4) * 60;
+  const id = mapShapeSeq++;
+  mapShapes.push({id, type, x, y, text:'', color: mapColor});
+  selectedShapeId = id;
+  renderMapCanvas();
+  const el = document.querySelector(`.shape-text[data-shape-id="${id}"]`);
+  if(el) el.focus();
+}
+function setupMapCanvas(){
+  const canvas = document.getElementById('mapCanvas');
+  if(!canvas) return;
+  renderMapCanvas();
+
+  canvas.addEventListener('click', (e) => {
+    if(e.target.closest('.shape-delete') || e.target.closest('.shape-handle')) return;
+    const shapeEl = e.target.closest('.map-shape');
+    if(!shapeEl) return;
+    const id = Number(shapeEl.dataset.shapeId);
+    if(selectedShapeId !== id){ selectedShapeId = id; renderMapCanvas(); }
+  });
+
+  canvas.addEventListener('input', (e) => {
+    if(!e.target.classList.contains('shape-text')) return;
+    const id = Number(e.target.dataset.shapeId);
+    const s = mapShapes.find(sh => sh.id === id);
+    if(s) s.text = e.target.textContent;
+  });
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const handle = e.target.closest('[data-action="drag-shape-handle"]');
+    if(!handle) return;
+    e.preventDefault();
+    const id = Number(handle.dataset.shapeId);
+    const s = mapShapes.find(sh => sh.id === id);
+    if(!s) return;
+    shapeDrag = {id, startClientX: e.clientX, startClientY: e.clientY, origX: s.x, origY: s.y, canvas};
   });
 }
-function setupDrawingCanvas(){
-  const canvas = document.getElementById('drawCanvas');
-  if(!canvas) return;
-  redrawCanvas();
-  function getPos(e){
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return [Math.round((e.clientX-rect.left)*scaleX), Math.round((e.clientY-rect.top)*scaleY)];
-  }
-  canvas.onpointerdown = (e) => {
-    e.preventDefault();
-    canvas.setPointerCapture(e.pointerId);
-    currentStroke = {color: drawColor, points:[getPos(e)]};
-    drawStrokes.push(currentStroke);
-  };
-  canvas.onpointermove = (e) => {
-    if(!currentStroke) return;
-    const pos = getPos(e);
-    const last = currentStroke.points[currentStroke.points.length-1];
-    if(Math.hypot(pos[0]-last[0], pos[1]-last[1]) < 2) return;
-    currentStroke.points.push(pos);
-    redrawCanvas();
-  };
-  canvas.onpointerup = () => {
-    if(currentStroke && shapeSnapEnabled) trySnapShape(currentStroke);
-    currentStroke = null;
-    redrawCanvas();
-  };
-  canvas.onpointerleave = () => { currentStroke = null; };
+window.addEventListener('pointermove', (e) => {
+  if(!shapeDrag) return;
+  const s = mapShapes.find(sh => sh.id === shapeDrag.id);
+  if(!s) return;
+  const rect = shapeDrag.canvas.getBoundingClientRect();
+  const dx = (e.clientX - shapeDrag.startClientX) / rect.width * MAP_W;
+  const dy = (e.clientY - shapeDrag.startClientY) / rect.height * MAP_H;
+  s.x = Math.max(0, Math.min(MAP_W, shapeDrag.origX + dx));
+  s.y = Math.max(0, Math.min(MAP_H, shapeDrag.origY + dy));
+  renderMapCanvas();
+});
+window.addEventListener('pointerup', () => { shapeDrag = null; });
+
+function renderShapesMap(shapes){
+  if(!shapes || !shapes.length) return '';
+  const items = shapes.map(s => `
+    <div class="map-shape map-shape-${s.type}" style="left:${(s.x/MAP_W*100)}%; top:${(s.y/MAP_H*100)}%; background:${s.color};">
+      <div class="shape-text">${s.text || ''}</div>
+    </div>`).join('');
+  return `<div class="map-canvas map-canvas-view">${items}</div>`;
 }
 
 function showToast(msg){
@@ -311,14 +295,8 @@ async function handleSubmitPost(){
   const lessonId = document.getElementById('postLesson').value;
   const content = document.getElementById('postContent').value.trim();
   if(!content){ showToast('اكتبي شرحك قبل الإرسال'); return; }
-  setState({loading:true, uploadingImage:false});
+  setState({loading:true});
   try{
-    let imageUrl = null;
-    if(selectedImageFile){
-      setState({loading:true, uploadingImage:true});
-      imageUrl = await uploadPostImage(storage, state.profile.uid, selectedImageFile);
-      setState({loading:true, uploadingImage:false});
-    }
     const lesson = (state.lessons || []).find(l => l.id === lessonId);
     await createPost(db, {
       lessonId,
@@ -328,15 +306,14 @@ async function handleSubmitPost(){
       type: state.postType,
       title: '',
       content,
-      imageUrl,
-      drawingData: drawStrokes,
+      shapesData: mapShapes,
     });
-    selectedImageFile = null;
-    drawStrokes = [];
+    mapShapes = [];
+    selectedShapeId = null;
     setState({loading:false});
     navigate('shareSuccess');
   }catch(err){
-    setState({loading:false, uploadingImage:false});
+    setState({loading:false});
     showToast('صار خطأ أثناء الإرسال، حاولي مرة أخرى.');
   }
 }
@@ -617,16 +594,6 @@ function viewSubjectLessons(){
   </div>`;
 }
 
-function renderDrawingSvg(strokes){
-  if(!strokes || !strokes.length) return '';
-  const paths = strokes.map(s => {
-    if(!s.points || s.points.length < 2) return '';
-    const d = s.points.map(([x,y], i) => (i===0?'M':'L') + x + ' ' + y).join(' ');
-    return `<path d="${d}" stroke="${s.color}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
-  }).join('');
-  return `<svg viewBox="0 0 300 220" class="post-drawing">${paths}</svg>`;
-}
-
 function postCard(p){
   const isMine = state.profile && p.studentUid === state.profile.uid;
   const pending = p.status === 'pending';
@@ -642,8 +609,7 @@ function postCard(p){
       ${pending ? `<span class="pending-tag">⏳ بانتظار الاعتماد</span>` : ''}
     </div>
     <div class="p-body">${p.content}</div>
-    ${p.imageUrl ? `<img class="post-image" src="${p.imageUrl}" alt="صورة مرفقة بالشرح">` : ''}
-    ${p.drawingData ? renderDrawingSvg(p.drawingData) : ''}
+    ${p.shapesData && p.shapesData.length ? renderShapesMap(p.shapesData) : ''}
     ${!pending ? `
     <div style="margin-top:11px;">
       <button class="pill-btn ${p.likedByMe?'liked':''}" data-action="like-post" data-id="${p.id}" ${p.likedByMe||isMine?'disabled':''}>
@@ -715,30 +681,17 @@ function viewSharePost(){
       <textarea id="postContent" placeholder="اكتبي شرحك هنا..."></textarea>
     </div>
     <div class="field">
-      <label>إضافة صورة (اختياري)</label>
-      <input type="file" id="postImageInput" accept="image/*" hidden>
-      <div id="postImageArea">
-        <label class="upload-box" for="postImageInput">
-          <span style="font-size:24px;">📷</span>
-          <span>اضغطي لاختيار صورة من جهازك</span>
-        </label>
+      <label>أضيفي خريطة ذهنية بسيطة (اختياري)</label>
+      <div class="shape-toolbar">
+        <button type="button" class="tool-btn" data-action="add-shape" data-type="circle">⭕ دائرة</button>
+        <button type="button" class="tool-btn" data-action="add-shape" data-type="rect">▭ مستطيل</button>
+        ${['#7C5CFC','#65C7FF','#2FAF86','#E2924B','#172033'].map(c => `
+          <button type="button" class="swatch ${c===mapColor?'selected':''}" data-action="pick-shape-color" data-color="${c}" style="background:${c}"></button>`).join('')}
       </div>
+      <div id="mapCanvas" class="map-canvas"></div>
+      <div class="hint">اضغطي "دائرة" أو "مستطيل" لإضافة شكل، اكتبي بداخله، واسحبيه من المقبض ⠿ لتحريكه. اضغطي × لحذفه.</div>
     </div>
-    <div class="field">
-      <label>أو ارسمي خريطة ذهنية (اختياري)</label>
-      <div class="drawing-toolbar">
-        ${['#172033','#7C5CFC','#65C7FF','#2FAF86','#E2924B'].map((c,i) => `
-          <button type="button" class="swatch ${i===1?'selected':''}" data-action="pick-draw-color" data-color="${c}" style="background:${c}"></button>`).join('')}
-        <button type="button" class="tool-btn" data-action="undo-stroke">↩️ تراجع</button>
-        <button type="button" class="tool-btn" data-action="clear-drawing">🗑️ مسح الكل</button>
-        <label style="display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--ink-soft); margin-inline-start:auto;">
-          <input type="checkbox" id="shapeSnapToggle" ${shapeSnapEnabled?'checked':''}>
-          🔷 تنسيق الأشكال
-        </label>
-      </div>
-      <canvas id="drawCanvas" class="draw-canvas" width="300" height="220"></canvas>
-    </div>
-    <button class="btn btn-primary" data-action="submit-post" ${state.loading?'disabled':''}>${state.loading?(state.uploadingImage?'جارِ رفع الصورة...':'جارِ الإرسال...'):'إرسال للمعلمة'}</button>
+    <button class="btn btn-primary" data-action="submit-post" ${state.loading?'disabled':''}>${state.loading?'جارِ الإرسال...':'إرسال للمعلمة'}</button>
   </div>`;
 }
 
@@ -907,7 +860,7 @@ function render(){
   if(state.view === 'studentHome'){ app.innerHTML = viewStudentHome() + studentNav(); return; }
   if(state.view === 'subjectLessons'){ app.innerHTML = viewSubjectLessons() + studentNav(); return; }
   if(state.view === 'lessonDetail'){ app.innerHTML = viewLessonDetail() + studentNav(); return; }
-  if(state.view === 'sharePost'){ app.innerHTML = viewSharePost() + studentNav(); setupDrawingCanvas(); return; }
+  if(state.view === 'sharePost'){ app.innerHTML = viewSharePost() + studentNav(); setupMapCanvas(); return; }
   if(state.view === 'shareSuccess'){ app.innerHTML = viewShareSuccess() + studentNav(); return; }
   if(state.view === 'askQuestion'){ app.innerHTML = viewAskQuestion() + studentNav(); return; }
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
@@ -918,29 +871,6 @@ function render(){
 }
 
 /* ---------- events ---------- */
-document.addEventListener('change', (e) => {
-  if(e.target.id === 'shapeSnapToggle'){
-    shapeSnapEnabled = e.target.checked;
-    return;
-  }
-  if(e.target.id === 'postImageInput'){
-    const file = e.target.files[0];
-    if(!file) return;
-    selectedImageFile = file;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const area = document.getElementById('postImageArea');
-      if(!area) return;
-      area.innerHTML = `
-        <div class="img-preview-wrap">
-          <img src="${ev.target.result}">
-          <button type="button" class="img-remove" data-action="remove-post-image">✕</button>
-        </div>`;
-    };
-    reader.readAsDataURL(file);
-  }
-});
-
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if(!el) return;
@@ -975,34 +905,25 @@ document.addEventListener('click', (e) => {
     runSeed();
   } else if(action === 'nav-share'){
     state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
-    selectedImageFile = null;
-    drawStrokes = [];
-    currentStroke = null;
-    shapeSnapEnabled = true;
+    mapShapes = [];
+    selectedShapeId = null;
     setState({postType:'quick'});
     navigate('sharePost');
-  } else if(action === 'remove-post-image'){
-    selectedImageFile = null;
-    const area = document.getElementById('postImageArea');
-    if(area){
-      area.innerHTML = `
-        <label class="upload-box" for="postImageInput">
-          <span style="font-size:24px;">📷</span>
-          <span>اضغطي لاختيار صورة من جهازك</span>
-        </label>`;
-    }
-  } else if(action === 'pick-draw-color'){
-    // تعديل مباشر على DOM بدل setState عشان ما يُعاد رسم الصفحة كاملة
-    // (وإلا كان بيمسح الرسمة الحالية على الكانفاس).
-    drawColor = el.dataset.color;
-    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('selected'));
+  } else if(action === 'add-shape'){
+    addMapShape(el.dataset.type);
+  } else if(action === 'pick-shape-color'){
+    mapColor = el.dataset.color;
+    document.querySelectorAll('.shape-toolbar .swatch').forEach(s => s.classList.remove('selected'));
     el.classList.add('selected');
-  } else if(action === 'undo-stroke'){
-    drawStrokes.pop();
-    redrawCanvas();
-  } else if(action === 'clear-drawing'){
-    drawStrokes = [];
-    redrawCanvas();
+    if(selectedShapeId){
+      const s = mapShapes.find(sh => sh.id === selectedShapeId);
+      if(s){ s.color = mapColor; renderMapCanvas(); }
+    }
+  } else if(action === 'delete-shape-one'){
+    const id = Number(el.dataset.shapeId);
+    mapShapes = mapShapes.filter(sh => sh.id !== id);
+    if(selectedShapeId === id) selectedShapeId = null;
+    renderMapCanvas();
   } else if(action === 'nav-ask'){
     state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
     navigate('askQuestion');
@@ -1013,7 +934,9 @@ document.addEventListener('click', (e) => {
   } else if(action === 'like-post'){
     handleLikePost(el.dataset.id);
   } else if(action === 'pick-type'){
-    setState({postType: el.dataset.type});
+    state.postType = el.dataset.type;
+    document.querySelectorAll('.type-chip').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
   } else if(action === 'submit-post'){
     handleSubmitPost();
   } else if(action === 'submit-question'){
