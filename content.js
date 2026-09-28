@@ -2,9 +2,6 @@ import {
   collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import {
-  ref, uploadBytes, getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 
 export async function fetchSubjects(db){
   const snap = await getDocs(query(collection(db, 'subjects'), orderBy('order')));
@@ -63,25 +60,14 @@ export async function seedInitialContent(db){
 
 // تنشئ مشاركة بحالة "قيد المراجعة" دايمًا — ما تظهر لبقية الطالبات
 // إلا بعد اعتماد المعلمة (يُبنى بالمرحلة 4).
-export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, imageUrl, drawingData}){
+export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, shapesData}){
   const docRef = await addDoc(collection(db, 'posts'), {
     lessonId, subjectId, studentUid, studentName, type, title, content,
-    imageUrl: imageUrl || null,
-    drawingData: (drawingData && drawingData.length) ? drawingData : null,
+    shapesData: (shapesData && shapesData.length) ? shapesData : null,
     status: 'pending', likes: 0,
     createdAt: serverTimestamp(), createdAtMs: Date.now(),
   });
   return docRef.id;
-}
-
-// رفع صورة اختيارية لمشاركة "فهمتها بطريقتي" إلى Firebase Storage.
-// كل طالبة ترفع فقط داخل مجلدها الخاص (posts/{uid}/...)، وقواعد Storage
-// تمنع أي طالبة ثانية ترفع أو تكتب بمجلد غيرها.
-export async function uploadPostImage(storage, uid, file){
-  const path = `posts/${uid}/${Date.now()}_${file.name}`;
-  const fileRef = ref(storage, path);
-  await uploadBytes(fileRef, file);
-  return getDownloadURL(fileRef);
 }
 
 // تُرجع فقط المشاركات المسموح للطالبة الحالية تشوفها: المعتمدة للجميع،
