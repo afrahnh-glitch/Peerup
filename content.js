@@ -60,10 +60,12 @@ export async function seedInitialContent(db){
 
 // تنشئ مشاركة بحالة "قيد المراجعة" دايمًا — ما تظهر لبقية الطالبات
 // إلا بعد اعتماد المعلمة (يُبنى بالمرحلة 4).
-export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, shapesData}){
+// mindMap: خريطة ذهنية اختيارية بشكل منظّم {v, nodes:[{id,parentId,text,x,y,w,h}]}
+// تُخزَّن داخل نفس المستند (بدون Storage). سقفها 40 عقدة ≈ أقل من 6KB.
+export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, mindMap}){
   const docRef = await addDoc(collection(db, 'posts'), {
     lessonId, subjectId, studentUid, studentName, type, title, content,
-    shapesData: (shapesData && shapesData.length) ? shapesData : null,
+    mindMap: (mindMap && mindMap.nodes && mindMap.nodes.length > 1) ? mindMap : null,
     status: 'pending', likes: 0,
     createdAt: serverTimestamp(), createdAtMs: Date.now(),
   });
