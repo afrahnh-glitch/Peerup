@@ -14,6 +14,36 @@
     جارِ التحميل...
   </div>
 </div></div>
+<script>
+  // لو صار أي خطأ (حتى بملف مستورد زي mindmap.js) يظهر مباشرة هنا
+  // بدل ما تبقى الصفحة عالقة على "جارِ التحميل..." بصمت بدون أي تفسير.
+  function showFatalError(msg){
+    var app = document.getElementById('app');
+    if(!app) return;
+    app.innerHTML =
+      '<div style="text-align:right; padding:24px 18px; direction:rtl; font-family:Tajawal,sans-serif;">' +
+      '<div style="font-size:15px; font-weight:700; color:#C6553D; margin-bottom:10px;">⚠️ صار خطأ أثناء تحميل الصفحة</div>' +
+      '<div style="font-size:12.5px; color:#736C82; line-height:1.8; margin-bottom:14px;">' +
+      'صوّري هذي الرسالة كاملة وأرسليها بالمحادثة عشان نعرف السبب بالضبط:</div>' +
+      '<div style="background:#FBEAE4; border-radius:10px; padding:12px; font-size:11.5px; ' +
+      'direction:ltr; text-align:left; word-break:break-word; color:#172033; white-space:pre-wrap;">' +
+      (msg || 'خطأ غير معروف') + '</div></div>';
+  }
+  window.addEventListener('error', function(e){
+    showFatalError((e.filename || 'ملف غير معروف') + '\n' + 'السطر ' + e.lineno + ': ' + e.message);
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    showFatalError('خطأ غير متوقع: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
+  // لو ما صار أي تغيير على الشاشة خلال 7 ثواني (يعني علقت على "جارِ التحميل")
+  // بدون أي خطأ واضح حتى — على الأغلب ملف ناقص أو 404 بأحد الاستيرادات.
+  setTimeout(function(){
+    var app = document.getElementById('app');
+    if(app && app.textContent.indexOf('جارِ التحميل') !== -1){
+      showFatalError('الصفحة عالقة على "جارِ التحميل" أكثر من 7 ثواني بدون خطأ ظاهر.\nالسبب الأرجح: أحد الملفات (auth.js أو content.js أو mindmap.js أو firebase-config.js) مفقود أو اسمه مكتوب غلط بالمستودع، أو الرابط بينها منقطع.');
+    }
+  }, 7000);
+</script>
 <script type="module" src="auth.js"></script>
 </body>
 </html>
