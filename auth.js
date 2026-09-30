@@ -15,7 +15,7 @@ import {
   attachLikeInfo, likePost, computeStudentPoints, fetchLeaderboard,
 } from "./content.js";
 import {
-  MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc,
+  MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc, mmNodesLabel,
 } from "./mindmap.js";
 
 const POST_TYPES = {
@@ -74,7 +74,7 @@ function renderMapPreview(){
     box.innerHTML = `
       <div class="mm-preview-card" data-action="open-mindmap">
         ${mmThumbSvg(data)}
-        <div class="mm-preview-cap">🧠 ${data.nodes.length} عقدة — اضغطي للتعديل</div>
+        <div class="mm-preview-cap">🧠 ${mmNodesLabel(data.nodes.length)} — اضغطي للتعديل</div>
       </div>
       <div class="mm-preview-actions">
         <button type="button" class="btn btn-primary" data-action="open-mindmap">✏️ تعديل الخريطة</button>
@@ -122,7 +122,7 @@ function mindMapBlock(p){
       return `
       <div class="mm-preview-card" data-action="view-mindmap" data-id="${p.id}">
         ${svg}
-        <div class="mm-preview-cap">🔍 خريطة ذهنية · ${Math.min(mm.nodes.length, 40)} عقدة — اضغطي للعرض الكامل</div>
+        <div class="mm-preview-cap">🔍 خريطة ذهنية · ${mmNodesLabel(Math.min(mm.nodes.length, 40))} — اضغطي للعرض الكامل</div>
       </div>`;
     }
   }
@@ -535,6 +535,8 @@ function viewStudentHome(){
   return `
   <div class="content-home">
     <div class="hero">
+      <img src="images/planet.svg" class="hero-planet" alt="" aria-hidden="true">
+      <img src="images/stars.svg" class="hero-stars" alt="" aria-hidden="true">
       <div class="hero-top">
         <div class="brand-mini"><div class="bm-mark">P</div><div class="bm-name">PeerUp</div></div>
         <div class="hero-avatar">🙋‍♀️</div>
@@ -544,7 +546,7 @@ function viewStudentHome(){
     </div>
     <div style="padding:0 18px;">
       <button class="role-card" data-action="nav-share">
-        <div class="badge" style="background:var(--primary-soft)">💡</div>
+        <div class="badge" style="background:var(--primary-soft)"><img src="images/lightbulb.svg" class="badge-icon" alt=""></div>
         <div><div class="r-title">فهمتها بطريقتي</div><div class="r-sub">شاركي زميلاتك طريقة فهمك</div></div>
         <span class="chev">←</span>
       </button>
@@ -554,7 +556,7 @@ function viewStudentHome(){
         <span class="chev">←</span>
       </button>
       <button class="role-card" data-action="nav-lessons">
-        <div class="badge" style="background:var(--skyblue-soft)">📚</div>
+        <div class="badge" style="background:var(--skyblue-soft)"><img src="images/book.svg" class="badge-icon" alt=""></div>
         <div><div class="r-title">أبي أفهم</div><div class="r-sub">شوفي دروس ${subj ? subj.name : 'المادة'}</div></div>
         <span class="chev">←</span>
       </button>
@@ -697,7 +699,7 @@ function viewShareSuccess(){
   return `
   <div class="content">
     <div class="success-screen">
-      <div class="semoji">🎉</div>
+      <img src="images/rocket.svg" class="success-rocket" alt="">
       <h2>وصلت مشاركتك!</h2>
       <p>بعد اعتماد المعلمة ستظهر لزميلاتك.</p>
       <button class="btn btn-primary" data-action="nav-student-home">رجوع للرئيسية</button>
@@ -753,7 +755,7 @@ function viewAchievements(){
       <div class="stat-mini"><div class="num">${s.helpedCount}</div><div class="lbl">🤝 ساعدتِ طالبات</div></div>
       <div class="stat-mini"><div class="num">${s.likesReceived}</div><div class="lbl">⭐ أفادني</div></div>
     </div>
-    <div class="section-title">🔥 نجوم PeerUp</div>
+    <div class="section-title stars-title-row"><img src="images/stars.svg" class="title-stars" alt="">🔥 نجوم PeerUp</div>
     <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
       ${board.length ? board.map((st,i) => `
         <div class="list-row" style="cursor:default;">
@@ -977,6 +979,20 @@ document.addEventListener('submit', (e) => {
   } else {
     handleLogin({email, password});
   }
+});
+
+/* لمسة تفاعل: إضافة/إزالة class="pressed" أثناء الضغط الفعلي باللمس أو
+   الفأرة، بدل الاعتماد على :active وحدها (غير موثوق دائمًا على iOS). */
+const PRESS_SEL = '.btn, .role-card, .list-row, .pill-btn, .navitem';
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target.closest(PRESS_SEL);
+  if(el && !el.disabled) el.classList.add('pressed');
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => {
+  document.addEventListener(evt, (e) => {
+    const el = e.target.closest(PRESS_SEL);
+    if(el) el.classList.remove('pressed');
+  });
 });
 
 render();
