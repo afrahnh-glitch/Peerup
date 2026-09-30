@@ -287,6 +287,48 @@ export function mmSanitize(data){
   return {v: 1, nodes: out.filter(n => reach.has(n.id))};
 }
 
+
+// «عقدة / عقدتان / 3 عقد / 11 عقدة» بصيغة عربية سليمة
+export function mmNodesLabel(n){
+  if(n === 1) return 'عقدة واحدة';
+  if(n === 2) return 'عقدتان';
+  return n + (n >= 3 && n <= 10 ? ' عقد' : ' عقدة');
+}
+
+// يلتف النص على أسطر بدون كسر كلمات؛ يعيد {lines, broke} (broke=اضطررنا لكسر كلمة طويلة)
+function wrapText(text, maxChars, maxLines){
+  const words = String(text).split(' ').filter(Boolean);
+  let lines = [], cur = '', broke = false;
+  words.forEach(w => {
+    if(!cur) cur = w;
+    else if((cur + ' ' + w).length <= maxChars) cur += ' ' + w;
+    else { lines.push(cur); cur = w; }
+  });
+  if(cur) lines.push(cur);
+  const out = [];
+  lines.forEach(l => { while(l.length > maxChars){ out.push(l.slice(0, maxChars)); l = l.slice(maxChars); broke = true; } out.push(l); });
+  if(out.length > maxLines){
+    const kept = out.slice(0, maxLines);
+    const last = kept[maxLines - 1];
+    kept[maxLines - 1] = (last.length >= maxChars ? last.slice(0, maxChars - 1) : last) + '…';
+    return {lines: kept, broke};
+  }
+  return {lines: out, broke};
+}
+// أكبر خط يتّسع فيه النص كاملًا (بدون كسر كلمة) داخل مساحة w×h؛ وإلا أصغر خط مع اقتطاع
+export function mmFitText(text, w, h, fs0, fsMin, maxLines){
+  let fs = fs0, res;
+  for(let i = 0; i < 40; i++){
+    const maxChars = Math.max(3, Math.floor(w / (fs * 0.56)));
+    res = wrapText(text, maxChars, maxLines);
+    if(!res.broke && res.lines.length * fs * 1.22 <= h && !String(res.lines[res.lines.length - 1]).endsWith('…')) return {lines: res.lines, fs};
+    if(fs <= fsMin) break;
+    fs = Math.max(fsMin, fs * 0.92);
+  }
+  const maxChars = Math.max(3, Math.floor(w / (fs * 0.56)));
+  return {lines: wrapText(text, maxChars, maxLines).lines, fs};
+}
+
 /* ------------------------------------------------- هندسة العرض والخطوط */
 export function mmBounds(nodes){
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -296,7 +338,7 @@ export function mmBounds(nodes){
     minY = Math.min(minY, n.y - h / 2); maxY = Math.max(maxY, n.y + h / 2);
   });
   const r = nodes.find(n => !n.parentId);          // حلقة الكوكب حول العقدة الرئيسية
-  if(r){ minX = Math.min(minX, r.x - MM_ROOT_SIZE * 0.95); maxX = Math.max(maxX, r.x + MM_ROOT_SIZE * 0.95); }
+  if(r){ minX = Math.min(minX, r.x - MM_ROOT_SIZE * 0.8); maxX = Math.max(maxX, r.x + MM_ROOT_SIZE * 0.8); }
   if(!isFinite(minX)) return {minX: -100, minY: -100, maxX: 100, maxY: 100};
   return {minX, minY, maxX, maxY};
 }
@@ -339,7 +381,17 @@ export function mmThumbSvg(data){
   const sc = Math.max(1, vw / 420);
   const fs = Math.round(13 * sc * 10) / 10;
   const f = v => Math.round(v * 10) / 10;
-  const cut = (t, w) => { const m = Math.max(3, Math.floor(w / (fs * 0.58))); return t.length > m ? t.slice(0, m - 1) + '…' : t; };
+  const fsMin = 13 * Math.max(1, sc * 0.5);
+  // نص متعدد الأسطر مركزيًا حول (cx,cy)
+  const txt = (lines, cx, cy, size, weight, fill) => {
+    const lh = size * 1.2, y0 = cy - (lines.length - 1) * lh / 2;
+    return `<text text-anchor="middle" font-size="${f(size)}" font-weight="${weight}" fill="${fill}">` +
+      lines.map((l, i) => `<tspan x="${f(cx)}" y="${f(y0 + i * lh)}" dy=".35em">${mmEsc(l)}</tspan>`).join('') + '</text>';
+  };
+
+  // خط موحّد = أصغر خط تحتاجه أي بطاقة لتظهر نصوصها كاملة (تناسق بصري)
+  let fsCard = fs;
+  d.nodes.filter(n => n.parentId).forEach(n => { fsCard = Math.min(fsCard, mmFitText(n.text, n.w - 14, n.h - 4, fs, fsMin, 2).fs); });
 
   let s = `<svg class="mm-thumb" viewBox="${f(b.minX - pad)} ${f(b.minY - pad)} ${f(vw)} ${f(vh)}" preserveAspectRatio="xMidYMid meet" xmlns="${SVGNS}" role="img" aria-label="خريطة ذهنية">`;
   d.nodes.filter(n => n.parentId).forEach(n => {
@@ -350,13 +402,15 @@ export function mmThumbSvg(data){
   d.nodes.forEach(n => {
     if(!n.parentId){
       const R = MM_ROOT_SIZE / 2;
-      s += `<ellipse cx="${n.x}" cy="${n.y}" rx="${f(R * 1.85)}" ry="${f(R * 0.44)}" transform="rotate(-14 ${n.x} ${n.y})" fill="none" stroke="#65C7FF" stroke-width="${f(2 * sc)}" opacity=".7"/>`;
+      s += `<ellipse cx="${n.x}" cy="${n.y}" rx="${f(R * 1.56)}" ry="${f(R * 0.34)}" transform="rotate(-14 ${n.x} ${n.y})" fill="none" stroke="#65C7FF" stroke-width="${f(1.6 * sc)}" opacity=".55"/>`;
       s += `<circle cx="${n.x}" cy="${n.y}" r="${R}" fill="#7C5CFC"/>`;
-      s += `<text x="${n.x}" y="${n.y}" dy=".35em" text-anchor="middle" font-size="${f(fs * 1.08)}" font-weight="800" fill="#fff">${mmEsc(cut(n.text, MM_ROOT_SIZE))}</text>`;
+      const fit = mmFitText(n.text, R * 1.56, R * 1.22, fs * 1.08, fsMin, 3);
+      s += txt(fit.lines, n.x, n.y, fit.fs, 800, '#fff');
     } else {
       const col = branchColor(byId, n), top = depth.get(n.id) === 1;
       s += `<rect x="${f(n.x - n.w / 2)}" y="${f(n.y - n.h / 2)}" width="${n.w}" height="${n.h}" rx="${f(12 * sc)}" fill="${top ? col.s : '#fff'}" stroke="${col.c}" stroke-width="${f(1.6 * sc)}"/>`;
-      s += `<text x="${n.x}" y="${n.y}" dy=".35em" text-anchor="middle" font-size="${fs}" font-weight="${top ? 700 : 500}" fill="#172033">${mmEsc(cut(n.text, n.w - 16))}</text>`;
+      const fit = mmFitText(n.text, n.w - 14, n.h - 4, fsCard, fsCard, 2);   // خط موحّد لكل البطاقات
+      s += txt(fit.lines, n.x, n.y, fsCard, top ? 700 : 500, '#172033');
     }
   });
   return s + '</svg>';
@@ -443,7 +497,7 @@ body.mm-open{overflow:hidden;}
 .mm-rootnode{width:132px; height:132px; border-radius:50%; padding:16px; isolation:isolate; font-weight:800; color:#fff; box-shadow:0 18px 38px -14px rgba(124,92,252,.65);}
 .mm-rootnode .mm-text{-webkit-line-clamp:5;}
 .mm-rootnode::after{content:""; position:absolute; top:0; right:0; bottom:0; left:0; border-radius:50%; z-index:-1; pointer-events:none; background:radial-gradient(circle at 32% 26%, #B9A2FF 0%, #7C5CFC 58%, #5B3FD8 100%);}
-.mm-rootnode::before{content:""; position:absolute; left:50%; top:50%; width:186%; height:44%; z-index:-2; pointer-events:none; transform:translate(-50%,-50%) rotate(-14deg); border:2px solid rgba(101,199,255,.7); border-radius:50%;}
+.mm-rootnode::before{content:""; position:absolute; left:50%; top:50%; width:156%; height:34%; z-index:-2; pointer-events:none; transform:translate(-50%,-50%) rotate(-14deg); border:2px solid rgba(101,199,255,.55); border-radius:50%;}
 /* الفروع: بطاقات أنيقة بلون فرعها */
 .mm-l1{width:150px; border-radius:16px; background:var(--s,#EFE8FF); border:1.6px solid var(--c,#7C5CFC); font-weight:700; box-shadow:0 8px 18px -12px rgba(23,37,84,.4);}
 .mm-l2{width:140px; border-radius:14px; background:#fff; border:1.4px solid var(--c,#7C5CFC); font-weight:500; box-shadow:0 6px 14px -10px rgba(23,37,84,.3);}
