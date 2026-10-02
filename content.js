@@ -61,11 +61,14 @@ export async function seedInitialContent(db){
 // تنشئ مشاركة بحالة "قيد المراجعة" دايمًا — ما تظهر لبقية الطالبات
 // إلا بعد اعتماد المعلمة (يُبنى بالمرحلة 4).
 // mindMap: خريطة ذهنية اختيارية بشكل منظّم {v, nodes:[{id,parentId,text,x,y,w,h}]}
-// تُخزَّن داخل نفس المستند (بدون Storage). سقفها 40 عقدة ≈ أقل من 6KB.
-export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, mindMap}){
+// voiceNote: تسجيل صوتي قصير اختياري {dataUrl, duration}
+// كلاهما يُخزَّن داخل نفس المستند (بدون Storage)، وهما بديلان لبعض —
+// مشاركة واحدة تحمل أحدهما أو ولا شي، مو الاثنين معًا.
+export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, mindMap, voiceNote}){
   const docRef = await addDoc(collection(db, 'posts'), {
     lessonId, subjectId, studentUid, studentName, type, title, content,
     mindMap: (mindMap && mindMap.nodes && mindMap.nodes.length > 1) ? mindMap : null,
+    voiceNote: (voiceNote && voiceNote.dataUrl) ? voiceNote : null,
     status: 'pending', likes: 0,
     createdAt: serverTimestamp(), createdAtMs: Date.now(),
   });
@@ -222,6 +225,65 @@ export async function computeStudentPoints(db, uid){
 
 // لوحة المتصدرين: كل الطالبات مع نقاطهن، الأعلى أول. (تراكمية حاليًا،
 // وليست بحساب أسبوعي منفصل — تبسيط مقصود بهذي المرحلة.)
+/* ================= المرحلة 6: تحدي اليوم + إحصائيات المعلمة ================= */
+
+// مستند واحد بمعرّف ثابت (current) — أي طالبة تقرأه، المعلمة فقط تكتبه.
+export async function fetchChallenge(db){
+  const snap = await getDoc(doc(db, 'challenge', 'current'));
+  return snap.exists() ? snap.data() : null;
+}
+export async function setChallenge(db, text){
+  await setDoc(doc(db, 'challenge', 'current'), {
+    text: String(text).trim().slice(0, 200), updatedAt: serverTimestamp(),
+  });
+}
+
+// آمن للمعلمة فقط: قاعدة الأمان تسمح لها بقراءة كل المشاركات بفضل
+// isTeacher()، وهو شرط مستقل عن بيانات المستند فيصح مع أي استعلام.
+export async function fetchAllPosts(db){
+  const snap = await getDocs(collection(db, 'posts'));
+  return snap.docs.map(d => ({id: d.id, ...d.data()}));
+}
+export async function fetchInteractionsCount(db){
+  const snap = await getDocs(collection(db, 'interactions'));
+  return snap.size;
+}
+
+export async function computeTeacherStats(db){
+  const [allPosts, allQuestions, interactionsCount] = await Promise.all([
+    fetchAllPosts(db),
+    fetchQuestionsWithAnswers(db),
+    fetchInteractionsCount(db).catch(() => 0),
+  ]);
+  const approvedPosts = allPosts.filter(p => p.status === 'approved');
+  const studentsCount = new Set(allPosts.map(p => p.studentUid)).size;
+  const answersCount = allQuestions.reduce((s, q) => s + (q.answers ? q.answers.length : 0), 0);
+
+  // أكثر درس تفاعلًا = مجموع شروحاته المعتمدة + أسئلته
+  const engagement = {};
+  approvedPosts.forEach(p => { engagement[p.lessonId] = (engagement[p.lessonId] || 0) + 1; });
+  allQuestions.forEach(q => { engagement[q.lessonId] = (engagement[q.lessonId] || 0) + 1; });
+  let topLessonId = null, topLessonScore = 0;
+  Object.entries(engagement).forEach(([lid, v]) => { if(v > topLessonScore){ topLessonScore = v; topLessonId = lid; } });
+
+  // المفاهيم التي تحتاج دعمًا = الدروس اللي عليها أكثر أسئلة من الطالبات
+  const byQuestions = {};
+  allQuestions.forEach(q => { byQuestions[q.lessonId] = (byQuestions[q.lessonId] || 0) + 1; });
+  const needsSupport = Object.entries(byQuestions)
+    .sort((a, b) => b[1] - a[1]).slice(0, 3)
+    .map(([lessonId, count]) => ({lessonId, count}));
+
+  return {
+    studentsCount,
+    explanationsCount: approvedPosts.length,
+    questionsCount: allQuestions.length,
+    answersCount,
+    interactionsCount,
+    topLessonId, topLessonScore,
+    needsSupport,
+  };
+}
+
 export async function fetchLeaderboard(db, limitN){
   const q = query(collection(db, 'users'), where('role', '==', 'student'));
   const snap = await getDocs(q);
