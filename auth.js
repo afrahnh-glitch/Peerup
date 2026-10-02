@@ -13,6 +13,7 @@ import {
   createAnswer, fetchAnswersForQuestion,
   fetchPendingPosts, approvePost, rejectPost, deletePost,
   attachLikeInfo, likePost, computeStudentPoints, fetchLeaderboard,
+  fetchChallenge, setChallenge, computeTeacherStats,
 } from "./content.js";
 import {
   MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc, mmNodesLabel,
@@ -50,6 +51,8 @@ const state = {
   expandedQuestions: new Set(),
   pendingPosts: [],
   myStats: null,
+  challenge: null,
+  teacherStats: null,
   leaderboard: [],
   history: [],           // in-app back stack once inside student/teacher screens
 };
@@ -61,6 +64,114 @@ function setState(patch){ Object.assign(state, patch); render(); }
    نفسه في Firestore — بدون صور، بدون Storage، بدون اشتراك مدفوع. */
 let mapDoc = null;   // الخريطة الجاري بناؤها؛ تبقى بالذاكرة أثناء كتابة المشاركة
 let mmOpen = null;   // المحرر المفتوح حاليًا (إن وُجد)
+let attachMode = null;   // null | 'voice' | 'map' — المرفق المختار حاليًا بنموذج المشاركة
+
+/* ---------- تسجيل صوتي: يُخزَّن كـ Base64 داخل نفس مستند المشاركة
+   (بدون Firebase Storage)، بسقف مدة قصير يضمن بقاء الحجم صغيرًا جدًا. ---------- */
+const VOICE_MAX_SECONDS = 20;
+let voiceNote = null;        // {dataUrl, duration} بعد انتهاء التسجيل
+let mediaRecorder = null;
+let mediaStream = null;
+let recordChunks = [];
+let recordStartMs = 0;
+let recordTimer = null;
+
+function fmtSec(s){ return '0:' + String(s).padStart(2, '0'); }
+function blobToDataUrl(blob){
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
+function renderVoiceArea(){
+  const box = document.getElementById('voiceArea');
+  if(!box) return;
+  if(mediaRecorder && mediaRecorder.state === 'recording'){
+    const elapsed = Math.floor((Date.now() - recordStartMs) / 1000);
+    box.innerHTML = `
+      <div class="voice-recording">
+        <span class="voice-dot"></span> جارِ التسجيل… ${fmtSec(elapsed)} / ${fmtSec(VOICE_MAX_SECONDS)}
+      </div>
+      <button type="button" class="btn btn-coral" data-action="stop-voice">⏹️ إيقاف التسجيل</button>`;
+  } else if(voiceNote){
+    box.innerHTML = `
+      <audio controls src="${voiceNote.dataUrl}" style="width:100%;"></audio>
+      <div class="voice-actions">
+        <button type="button" class="pill-btn" data-action="redo-voice">🔁 إعادة التسجيل</button>
+        <button type="button" class="pill-btn" data-action="discard-voice">🗑️ حذف</button>
+      </div>`;
+  } else {
+    box.innerHTML = `
+      <button type="button" class="btn btn-primary" data-action="start-voice">🎙️ ابدئي التسجيل</button>
+      <div class="hint" style="text-align:center; margin-top:6px;">٢٠ ثانية كحد أقصى</div>`;
+  }
+}
+async function startRecording(){
+  if(!navigator.mediaDevices || !window.MediaRecorder){
+    showToast('التسجيل الصوتي غير مدعوم على هذا المتصفح.');
+    return;
+  }
+  try{
+    mediaStream = await navigator.mediaDevices.getUserMedia({audio: true});
+  }catch(err){
+    showToast('ما قدرنا نوصل للميكروفون. تأكدي من إذن الوصول بإعدادات المتصفح.');
+    return;
+  }
+  recordChunks = [];
+  let mime = '';
+  ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].forEach((m) => {
+    if(!mime && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) mime = m;
+  });
+  try{
+    mediaRecorder = new MediaRecorder(mediaStream, mime ? {mimeType: mime, audioBitsPerSecond: 24000} : {audioBitsPerSecond: 24000});
+  }catch(err){
+    showToast('التسجيل الصوتي غير مدعوم على هذا المتصفح.');
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+    return;
+  }
+  mediaRecorder.ondataavailable = (e) => { if(e.data && e.data.size) recordChunks.push(e.data); };
+  mediaRecorder.onstop = async () => {
+    const blob = new Blob(recordChunks, {type: mediaRecorder.mimeType || 'audio/webm'});
+    const duration = Math.min(VOICE_MAX_SECONDS, Math.round((Date.now() - recordStartMs) / 1000));
+    const dataUrl = await blobToDataUrl(blob);
+    voiceNote = {dataUrl, duration};
+    if(mediaStream){ mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+    mediaRecorder = null;
+    renderVoiceArea();
+  };
+  recordStartMs = Date.now();
+  mediaRecorder.start();
+  renderVoiceArea();
+  recordTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - recordStartMs) / 1000);
+    if(elapsed >= VOICE_MAX_SECONDS) stopRecording();
+    else renderVoiceArea();
+  }, 500);
+}
+function stopRecording(){
+  clearInterval(recordTimer); recordTimer = null;
+  if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+}
+function discardVoice(){
+  voiceNote = null;
+  renderVoiceArea();
+}
+
+function renderAttachArea(){
+  const box = document.getElementById('attachArea');
+  if(!box) return;
+  box.innerHTML = `
+    <div class="attach-toggle">
+      <button type="button" class="attach-opt ${attachMode==='voice'?'selected':''}" data-action="pick-attach" data-mode="voice">🎙️ تسجيل صوتي</button>
+      <button type="button" class="attach-opt ${attachMode==='map'?'selected':''}" data-action="pick-attach" data-mode="map">🧠 خريطة ذهنية</button>
+    </div>
+    ${attachMode==='voice' ? '<div id="voiceArea" class="attach-body"></div>' : ''}
+    ${attachMode==='map' ? '<div id="mapPreview" class="attach-body mm-preview"></div>' : ''}`;
+  if(attachMode === 'voice') renderVoiceArea();
+  if(attachMode === 'map') renderMapPreview();
+}
 
 function currentPostLessonTitle(){
   const sel = document.getElementById('postLesson');
@@ -229,13 +340,14 @@ async function loadProfileAndGo(uid){
   }
   let pendingPosts = [];
   let myStats = null;
+  const challenge = await fetchChallenge(db).catch(() => null);
   if(profile.role === 'teacher'){
     pendingPosts = await fetchPendingPosts(db).catch(() => []);
   } else {
     myStats = await computeStudentPoints(db, uid).catch(() => null);
   }
   setState({
-    loading:false, profile, subjects, lessons, pendingPosts, myStats, history:[],
+    loading:false, profile, subjects, lessons, pendingPosts, myStats, challenge, history:[],
     view: profile.role === 'teacher' ? 'teacherHome' : 'studentHome',
   });
 }
@@ -303,10 +415,15 @@ function lessonTitleById(id){
 }
 async function handleSubmitPost(){
   const lessonId = document.getElementById('postLesson').value;
+  const title = document.getElementById('postTitle').value.trim();
   const content = document.getElementById('postContent').value.trim();
+  if(!title){ showToast('اكتبي عنوان قبل الإرسال'); return; }
   if(!content){ showToast('اكتبي شرحك قبل الإرسال'); return; }
-  const mindMap = (mapDoc && mmNodeCount(mapDoc) > 1) ? mmSerialize(mapDoc) : null;
+  const mindMap = (attachMode === 'map' && mapDoc && mmNodeCount(mapDoc) > 1) ? mmSerialize(mapDoc) : null;
   if(mindMap && JSON.stringify(mindMap).length > 60000){ showToast('الخريطة كبيرة جدًا، قلّلي عدد العقد.'); return; }
+  const voice = (attachMode === 'voice' && voiceNote) ? voiceNote : null;
+  if(voice && voice.dataUrl.length > 400000){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
+  if(attachMode === 'voice' && mediaRecorder && mediaRecorder.state === 'recording'){ showToast('أوقفي التسجيل قبل الإرسال.'); return; }
   setState({loading:true});
   try{
     const lesson = (state.lessons || []).find(l => l.id === lessonId);
@@ -316,11 +433,14 @@ async function handleSubmitPost(){
       studentUid: state.profile.uid,
       studentName: state.profile.displayName,
       type: state.postType,
-      title: '',
+      title,
       content,
       mindMap,
+      voiceNote: voice,
     });
     mapDoc = null;
+    voiceNote = null;
+    attachMode = null;
     setState({loading:false});
     navigate('shareSuccess');
   }catch(err){
@@ -392,6 +512,23 @@ async function handleAddLesson(title){
     showToast('صار خطأ أثناء إضافة الدرس. تأكدي إنك مسجّلة كمعلمة.');
   }
 }
+async function handleSetChallenge(text){
+  setState({loading:true});
+  try{
+    await setChallenge(db, text);
+    setState({loading:false, challenge:{text}});
+    showToast('🔥 تحدي اليوم صار منشور للطالبات');
+  }catch(err){
+    setState({loading:false});
+    showToast('صار خطأ أثناء نشر التحدي. تأكدي إنك مسجّلة كمعلمة.');
+  }
+}
+async function openTeacherStats(){
+  setState({loading:true});
+  const teacherStats = await computeTeacherStats(db).catch(() => null);
+  setState({loading:false});
+  navigate('teacherStats', {teacherStats});
+}
 async function openTeacherReview(){
   const pendingPosts = await fetchPendingPosts(db).catch(() => []);
   navigate('teacherReview', {pendingPosts});
@@ -450,7 +587,6 @@ function pageHead(title, sub){
   <div class="page-head">
     <button class="back-btn" data-action="back">←</button>
     <div style="flex:1;"><h2>${title}</h2>${sub?`<div class="p-sub">${sub}</div>`:''}</div>
-    <button class="back-btn" data-action="logout" title="تسجيل الخروج">🚪</button>
   </div>`;
 }
 function studentNav(){
@@ -471,7 +607,7 @@ function teacherNav(){
     <button class="navitem ${active('teacherHome')}" data-action="nav-teacher-home"><span class="ic-wrap">🏠</span>الرئيسية</button>
     <button class="navitem ${active('teacherReview')}" data-action="nav-teacher-review"><span class="ic-wrap">📥</span>المراجعة</button>
     <button class="navitem" data-action="coming-soon"><span class="ic-wrap">❓</span>الأسئلة</button>
-    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">📊</span>الإحصائيات</button>
+    <button class="navitem ${active('teacherStats')}" data-action="nav-teacher-stats"><span class="ic-wrap">📊</span>الإحصائيات</button>
   </div>`;
 }
 
@@ -575,6 +711,14 @@ function viewStudentHome(){
         <span class="chev">←</span>
       </button>
 
+      ${state.challenge && state.challenge.text ? `
+      <div class="challenge-card">
+        <img src="images/rocket.svg" class="challenge-rocket" alt="" aria-hidden="true">
+        <div class="challenge-tag">🔥 تحدي اليوم</div>
+        <div class="challenge-text">${state.challenge.text}</div>
+        <button class="btn challenge-btn" data-action="nav-share">أشارك بالتحدي ←</button>
+      </div>` : ''}
+
       ${lessons.length ? `
       <div class="section-title">📚 دروس ${subj ? subj.name : ''}</div>
       <div class="lesson-list">
@@ -628,7 +772,9 @@ function postCard(p){
       </div>
       ${pending ? `<span class="pending-tag">⏳ بانتظار الاعتماد</span>` : ''}
     </div>
+    ${p.title ? `<div class="p-title">${p.title}</div>` : ''}
     <div class="p-body">${p.content}</div>
+    ${p.voiceNote && p.voiceNote.dataUrl ? `<audio controls src="${p.voiceNote.dataUrl}" class="post-audio"></audio>` : ''}
     ${mindMapBlock(p)}
     ${!pending ? `
     <div style="margin-top:11px;">
@@ -697,13 +843,17 @@ function viewSharePost(){
       </div>
     </div>
     <div class="field">
-      <label>اشرحيها بطريقتك</label>
+      <label>العنوان</label>
+      <input type="text" id="postTitle" placeholder="مثال: أسهل طريقة أفهم فيها الدرس">
+    </div>
+    <div class="field">
+      <label>الشرح</label>
       <textarea id="postContent" placeholder="اكتبي شرحك هنا..."></textarea>
     </div>
     <div class="field">
-      <label>خريطة ذهنية للدرس (اختياري)</label>
-      <div id="mapPreview" class="mm-preview"></div>
-      <div class="hint">تُرسل مع شرحك للمعلمة، وتظهر لزميلاتك بعد الاعتماد.</div>
+      <label>إضافة مرفق (اختياري)</label>
+      <div id="attachArea"></div>
+      <div class="hint">يُرسل مع شرحك للمعلمة، ويظهر لزميلاتك بعد الاعتماد.</div>
     </div>
     <button class="btn btn-primary" data-action="submit-post" ${state.loading?'disabled':''}>${state.loading?'جارِ الإرسال...':'إرسال للمعلمة'}</button>
   </div>`;
@@ -800,6 +950,12 @@ function viewTeacherHome(){
       <div><div class="r-title">${pendingCount} مشاركة تنتظر المراجعة</div><div class="r-sub">اضغطي لاعتماد أو رفض المشاركات</div></div>
       <span class="chev">←</span>
     </button>
+    <div class="section-title">🔥 تحدي اليوم</div>
+    <form id="challengeForm" class="challenge-edit-card">
+      <textarea id="challengeInput" placeholder="مثال: اشرحي في 60 ثانية: لماذا لا يسقط برج بيزا؟">${state.challenge && state.challenge.text ? state.challenge.text : ''}</textarea>
+      <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الحفظ...':(state.challenge && state.challenge.text ? '💾 تحديث التحدي' : '🚀 نشر تحدي اليوم')}</button>
+    </form>
+
     <div class="info-card">
       المواد الحالية: <b>${subjCount}</b> — الدروس: <b>${lessonCount}</b>
       ${subjCount===0 ? `
@@ -841,7 +997,9 @@ function pendingPostCard(p){
         <div class="p-meta">${t.label} · ${lessonTitleById(p.lessonId)}</div>
       </div>
     </div>
+    ${p.title ? `<div class="p-title">${p.title}</div>` : ''}
     <div class="p-body" style="margin-bottom:12px;">${p.content}</div>
+    ${p.voiceNote && p.voiceNote.dataUrl ? `<audio controls src="${p.voiceNote.dataUrl}" class="post-audio" style="margin-bottom:12px;"></audio>` : ''}
     ${mindMapBlock(p)}
     <div style="display:flex; gap:8px;">
       <button class="btn btn-primary" style="width:auto; flex:1;" data-action="approve-post" data-id="${p.id}">✓ اعتماد</button>
@@ -863,9 +1021,54 @@ function viewTeacherReview(){
   </div>`;
 }
 
+function viewTeacherStats(){
+  const t = state.teacherStats;
+  if(!t){
+    return `
+    <div class="content-app">
+      <div class="page-head" style="padding-top:2px;"><div><h2>📊 الإحصائيات</h2></div></div>
+      <div class="empty-state"><span class="emoji">📊</span>ما فيه بيانات كافية بعد.</div>
+    </div>`;
+  }
+  const rows = [
+    ['👩🏻‍🎓 الطالبات المشاركات', t.studentsCount],
+    ['💡 عدد الشروحات المعتمدة', t.explanationsCount],
+    ['🆘 عدد الأسئلة', t.questionsCount],
+    ['💬 عدد الإجابات', t.answersCount],
+    ['⭐ عدد التفاعلات («أفادني»)', t.interactionsCount],
+  ];
+  return `
+  <div class="content-app">
+    <div class="page-head" style="padding-top:2px;"><div><h2>📊 الإحصائيات</h2></div></div>
+    <div class="stats-grid">
+      ${rows.map(([label, val]) => `
+        <div class="stat-tile"><div class="stat-num">${val}</div><div class="stat-lbl">${label}</div></div>`).join('')}
+    </div>
+
+    ${t.topLessonId ? `
+    <div class="section-title">🏆 أكثر درس تفاعلًا</div>
+    <div class="info-card" style="margin-top:0;">
+      <b>${lessonTitleById(t.topLessonId)}</b> — ${t.topLessonScore} تفاعل (شروحات وأسئلة معًا)
+    </div>` : ''}
+
+    <div class="section-title">⚠️ مفاهيم تحتاج دعمًا</div>
+    ${t.needsSupport.length ? `
+    <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
+      ${t.needsSupport.map(n => `
+        <div class="quick-glance-row"><span>${lessonTitleById(n.lessonId)}</span><span class="qv">${n.count} سؤال</span></div>`).join('')}
+    </div>
+    <div class="hint" style="margin-top:8px;">الدروس اللي عليها أكثر أسئلة من الطالبات — مؤشر إنها تحتاج إعادة شرح بالحصة.</div>` : `
+    <div class="empty-state"><span class="emoji">🎉</span>ما فيه مفاهيم بارزة تحتاج دعمًا إضافيًا حاليًا.</div>`}
+  </div>`;
+}
+
 /* ---------- main render ---------- */
 function render(){
   const app = document.getElementById('app');
+  if(state.view !== 'sharePost' && mediaStream){
+    stopRecording();
+    if(mediaStream){ mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+  }
   if(state.view === 'loading'){
     app.innerHTML = `<div class="content" style="text-align:center; padding-top:80px; color:var(--ink-soft); font-size:13px;">جارِ التحميل...</div>`;
     return;
@@ -875,13 +1078,14 @@ function render(){
   if(state.view === 'studentHome'){ app.innerHTML = viewStudentHome() + studentNav(); return; }
   if(state.view === 'subjectLessons'){ app.innerHTML = viewSubjectLessons() + studentNav(); return; }
   if(state.view === 'lessonDetail'){ app.innerHTML = viewLessonDetail() + studentNav(); return; }
-  if(state.view === 'sharePost'){ app.innerHTML = viewSharePost() + studentNav(); renderMapPreview(); return; }
+  if(state.view === 'sharePost'){ app.innerHTML = viewSharePost() + studentNav(); renderAttachArea(); return; }
   if(state.view === 'shareSuccess'){ app.innerHTML = viewShareSuccess() + studentNav(); return; }
   if(state.view === 'askQuestion'){ app.innerHTML = viewAskQuestion() + studentNav(); return; }
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
   if(state.view === 'achievements'){ app.innerHTML = viewAchievements() + studentNav(); return; }
   if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
   if(state.view === 'teacherReview'){ app.innerHTML = viewTeacherReview() + teacherNav(); return; }
+  if(state.view === 'teacherStats'){ app.innerHTML = viewTeacherStats() + teacherNav(); return; }
   app.innerHTML = viewLanding();
 }
 
@@ -914,6 +1118,8 @@ document.addEventListener('click', (e) => {
     setState({view:'teacherHome', history:[]});
   } else if(action === 'nav-teacher-review'){
     openTeacherReview();
+  } else if(action === 'nav-teacher-stats'){
+    openTeacherStats();
   } else if(action === 'approve-post'){
     handleApprovePost(el.dataset.id);
   } else if(action === 'reject-post'){
@@ -929,8 +1135,25 @@ document.addEventListener('click', (e) => {
   } else if(action === 'nav-share'){
     state.shareLessonId = el.dataset.lesson || (state.lessons[0] && state.lessons[0].id) || '';
     mapDoc = null;
+    attachMode = null;
+    voiceNote = null;
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') stopRecording();
     setState({postType:'quick'});
     navigate('sharePost');
+  } else if(action === 'pick-attach'){
+    const mode = el.dataset.mode;
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') stopRecording();
+    attachMode = (attachMode === mode) ? null : mode;
+    renderAttachArea();
+  } else if(action === 'start-voice'){
+    startRecording();
+  } else if(action === 'stop-voice'){
+    stopRecording();
+  } else if(action === 'redo-voice'){
+    voiceNote = null;
+    renderVoiceArea();
+  } else if(action === 'discard-voice'){
+    discardVoice();
   } else if(action === 'open-mindmap'){
     openMapEditor();
   } else if(action === 'clear-mindmap'){
@@ -981,6 +1204,13 @@ document.addEventListener('submit', (e) => {
     const title = input.value.trim();
     if(!title) return;
     handleAddLesson(title);
+    return;
+  }
+  if(e.target.id === 'challengeForm'){
+    e.preventDefault();
+    const text = document.getElementById('challengeInput').value.trim();
+    if(!text){ showToast('اكتبي نص التحدي قبل النشر'); return; }
+    handleSetChallenge(text);
     return;
   }
   if(e.target.id !== 'authForm') return;
