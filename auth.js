@@ -228,11 +228,14 @@ async function loadProfileAndGo(uid){
     lessons = await fetchLessons(db, subjects[0].id).catch(() => []);
   }
   let pendingPosts = [];
+  let myStats = null;
   if(profile.role === 'teacher'){
     pendingPosts = await fetchPendingPosts(db).catch(() => []);
+  } else {
+    myStats = await computeStudentPoints(db, uid).catch(() => null);
   }
   setState({
-    loading:false, profile, subjects, lessons, pendingPosts, history:[],
+    loading:false, profile, subjects, lessons, pendingPosts, myStats, history:[],
     view: profile.role === 'teacher' ? 'teacherHome' : 'studentHome',
   });
 }
@@ -276,6 +279,10 @@ async function handleLikePost(postId){
   }catch(err){
     showToast('يبدو إنك سبق ووصلتِها بـ«أفادني».');
   }
+}
+async function refreshHomeStats(){
+  const myStats = await computeStudentPoints(db, state.profile.uid).catch(() => state.myStats);
+  setState({myStats});
 }
 async function openAchievements(){
   setState({loading:true});
@@ -532,44 +539,51 @@ function viewStudentHome(){
   const p = state.profile || {};
   const lessons = state.lessons || [];
   const subj = state.subjects[0];
+  const s = state.myStats;
   return `
   <div class="content-home">
-    <div class="hero">
+    <div class="hero hero-compact">
       <img src="images/planet.svg" class="hero-planet" alt="" aria-hidden="true">
       <img src="images/stars.svg" class="hero-stars" alt="" aria-hidden="true">
       <div class="hero-top">
         <div class="brand-mini"><div class="bm-mark">P</div><div class="bm-name">PeerUp</div></div>
-        <div class="hero-avatar">🙋‍♀️</div>
+        <div class="hero-avatar">👩‍🚀</div>
       </div>
       <h1>صباح الخير، ${p.displayName || ''} 👋</h1>
       <p class="sub">وش ودك تسوين اليوم؟</p>
+      ${s ? `
+      <div class="hero-stats">
+        <div class="hero-stat"><span class="hs-ic">⭐</span><span class="hs-v">${s.points}</span><span class="hs-l">نقطة</span></div>
+        <div class="hero-stat"><span class="hs-ic">💡</span><span class="hs-v">${s.explanationsCount}</span><span class="hs-l">شرح</span></div>
+        <div class="hero-stat"><span class="hs-ic">🤝</span><span class="hs-v">${s.helpedCount}</span><span class="hs-l">ساعدتِ</span></div>
+      </div>` : ''}
     </div>
     <div style="padding:0 18px;">
-      <button class="role-card" data-action="nav-share">
-        <div class="badge" style="background:var(--primary-soft)"><img src="images/lightbulb.svg" class="badge-icon" alt=""></div>
-        <div><div class="r-title">فهمتها بطريقتي</div><div class="r-sub">شاركي زميلاتك طريقة فهمك</div></div>
-        <span class="chev">←</span>
-      </button>
-      <button class="role-card" data-action="nav-ask">
-        <div class="badge" style="background:var(--coral-soft)">🆘</div>
-        <div><div class="r-title">أنقذوني!</div><div class="r-sub">في شيء مو فاهمته؟ اسألي زميلاتك</div></div>
-        <span class="chev">←</span>
-      </button>
-      <button class="role-card" data-action="nav-lessons">
-        <div class="badge" style="background:var(--skyblue-soft)"><img src="images/book.svg" class="badge-icon" alt=""></div>
-        <div><div class="r-title">أبي أفهم</div><div class="r-sub">شوفي دروس ${subj ? subj.name : 'المادة'}</div></div>
+      <div class="qa-grid">
+        <button class="qa-card" data-action="nav-share">
+          <div class="qa-badge" style="background:var(--primary-soft)"><img src="images/lightbulb.svg" class="badge-icon" alt=""></div>
+          <div class="qa-title">فهمتها<br>بطريقتي</div>
+        </button>
+        <button class="qa-card" data-action="nav-ask">
+          <div class="qa-badge" style="background:var(--coral-soft)">🆘</div>
+          <div class="qa-title">أنقذوني<br>أحتاج مساعدة</div>
+        </button>
+      </div>
+      <button class="qa-card qa-wide" data-action="nav-lessons">
+        <div class="qa-badge" style="background:var(--skyblue-soft)"><img src="images/book.svg" class="badge-icon" alt=""></div>
+        <div class="qa-title">أبي أفهم<div class="qa-sub">شوفي دروس ${subj ? subj.name : 'المادة'}</div></div>
         <span class="chev">←</span>
       </button>
 
       ${lessons.length ? `
       <div class="section-title">📚 دروس ${subj ? subj.name : ''}</div>
-      <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
-        ${lessons.map(l => `
-          <div class="list-row" data-action="nav-lesson" data-id="${l.id}">
-            <div class="badge sm" style="background:var(--primary-soft)">${subj ? subj.emoji : '📘'}</div>
-            <div><div class="r-title">${l.title}</div><div class="r-meta">اضغطي لعرض الدرس</div></div>
+      <div class="lesson-list">
+        ${lessons.map((l, i) => `
+          <button class="lesson-row" data-action="nav-lesson" data-id="${l.id}">
+            <div class="lesson-ic">${subj ? subj.emoji : '📘'}</div>
+            <div class="lesson-mid"><div class="lesson-title">${l.title}</div><div class="lesson-meta">درس ${i+1}</div></div>
             <span class="chev">←</span>
-          </div>`).join('')}
+          </button>`).join('')}
       </div>` : `
       <div class="empty-state" style="margin-top:24px;">
         <span class="emoji">📭</span>
@@ -588,13 +602,13 @@ function viewSubjectLessons(){
     ${pageHead('تعلّمي من زميلاتك', 'اختاري الدرس اللي تبين تشوفينه')}
     ${subj ? `<div class="subject-tag">${subj.emoji} ${subj.name}</div>` : ''}
     ${lessons.length ? `
-    <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
-      ${lessons.map(l => `
-        <div class="list-row" data-action="nav-lesson" data-id="${l.id}">
-          <div class="badge sm" style="background:var(--primary-soft)">${subj ? subj.emoji : '📘'}</div>
-          <div><div class="r-title">${l.title}</div><div class="r-meta">اضغطي لعرض الدرس</div></div>
+    <div class="lesson-list">
+      ${lessons.map((l, i) => `
+        <button class="lesson-row" data-action="nav-lesson" data-id="${l.id}">
+          <div class="lesson-ic">${subj ? subj.emoji : '📘'}</div>
+          <div class="lesson-mid"><div class="lesson-title">${l.title}</div><div class="lesson-meta">درس ${i+1}</div></div>
           <span class="chev">←</span>
-        </div>`).join('')}
+        </button>`).join('')}
     </div>` : `
     <div class="empty-state"><span class="emoji">📭</span>ما فيه دروس بعد.</div>`}
   </div>`;
@@ -895,6 +909,7 @@ document.addEventListener('click', (e) => {
     goBack();
   } else if(action === 'nav-student-home'){
     setState({view:'studentHome', history:[]});
+    refreshHomeStats();
   } else if(action === 'nav-teacher-home'){
     setState({view:'teacherHome', history:[]});
   } else if(action === 'nav-teacher-review'){
@@ -983,7 +998,7 @@ document.addEventListener('submit', (e) => {
 
 /* لمسة تفاعل: إضافة/إزالة class="pressed" أثناء الضغط الفعلي باللمس أو
    الفأرة، بدل الاعتماد على :active وحدها (غير موثوق دائمًا على iOS). */
-const PRESS_SEL = '.btn, .role-card, .list-row, .pill-btn, .navitem';
+const PRESS_SEL = '.btn, .role-card, .list-row, .pill-btn, .navitem, .qa-card, .lesson-row';
 document.addEventListener('pointerdown', (e) => {
   const el = e.target.closest(PRESS_SEL);
   if(el && !el.disabled) el.classList.add('pressed');
