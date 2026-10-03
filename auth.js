@@ -779,7 +779,7 @@ function viewSubjectLessons(){
   <div class="content-app">
     ${pageHead('تعلّمي من زميلاتك', 'اختاري الدرس اللي تبين تشوفينه')}
     <div class="field" style="margin-bottom:16px;">
-      <input type="search" id="lessonSearchInput" placeholder="🔍 ابحثي بعنوان الشرح أو نصه..." autocomplete="off">
+      <input type="search" id="lessonSearchInput" placeholder="🔍 ابحثي باسم الدرس أو عنوان الشرح أو نصه..." autocomplete="off">
     </div>
     <div id="searchResultsArea"></div>
     <div id="lessonListArea">
@@ -823,7 +823,9 @@ async function renderSearchResults(term){
   const pool = await ensureSearchPool();
   const needle = q.toLowerCase();
   let matches = pool.filter(p =>
-    (p.title || '').toLowerCase().includes(needle) || (p.content || '').toLowerCase().includes(needle));
+    (p.title || '').toLowerCase().includes(needle)
+    || (p.content || '').toLowerCase().includes(needle)
+    || lessonTitleById(p.lessonId).toLowerCase().includes(needle));
   matches = await attachLikeInfo(db, matches, state.profile.uid).catch(() => matches);
   matches = await attachBookmarkInfo(db, matches, state.profile.uid).catch(() => matches);
   if(document.getElementById('lessonSearchInput') && document.getElementById('lessonSearchInput').value.trim() !== q) return; // تغيّر البحث أثناء الانتظار
