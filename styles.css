@@ -204,6 +204,15 @@ input{font-family:inherit;}
 }
 .pill-btn:hover{transform:translateY(-1px);}
 .pill-btn.liked{background:var(--coral-soft); border-color:transparent; color:var(--coral); animation:likePop .45s cubic-bezier(.3,1.6,.4,1);}
+.pill-btn.saved{background:var(--lavender); border-color:transparent; color:var(--primary);}
+
+.challenge-banner{
+  background:linear-gradient(120deg, var(--primary) 0%, var(--skyblue) 140%); color:#fff;
+  border-radius:16px; padding:14px 16px; font-weight:700; font-size:13.5px; line-height:1.7; margin-bottom:16px;
+}
+.attach-toggle.three{display:flex; gap:8px; margin-bottom:10px;}
+.attach-toggle.three .attach-opt{flex:1; padding:10px 4px; font-size:11.8px;}
+.challenge-textarea{width:100%; min-height:110px; border:1.5px solid var(--border); border-radius:13px; padding:12px 13px; font-size:14px; font-family:inherit; color:var(--ink); resize:vertical;}
 @keyframes likePop{0%{transform:scale(1);} 40%{transform:scale(1.18);} 100%{transform:scale(1);}}
 .pill-btn:disabled{opacity:.9; cursor:default;}
 .pill-btn:disabled:hover{transform:none;}
