@@ -14,6 +14,8 @@ import {
   fetchPendingPosts, approvePost, rejectPost, deletePost,
   attachLikeInfo, likePost, computeStudentPoints, fetchLeaderboard,
   fetchChallenge, setChallenge, computeTeacherStats,
+  attachBookmarkInfo, addBookmark, removeBookmark, fetchBookmarkedPosts,
+  fetchAllApprovedPosts,
 } from "./content.js";
 import {
   MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc, mmNodesLabel,
@@ -46,7 +48,6 @@ const state = {
   questions: [],
   allQuestions: [],
   shareLessonId: '',
-  postType: 'quick',
   uploadingImage: false,
   expandedQuestions: new Set(),
   pendingPosts: [],
@@ -54,6 +55,7 @@ const state = {
   challenge: null,
   teacherStats: null,
   leaderboard: [],
+  savedPosts: [],
   history: [],           // in-app back stack once inside student/teacher screens
 };
 
@@ -65,6 +67,7 @@ function setState(patch){ Object.assign(state, patch); render(); }
 let mapDoc = null;   // الخريطة الجاري بناؤها؛ تبقى بالذاكرة أثناء كتابة المشاركة
 let mmOpen = null;   // المحرر المفتوح حاليًا (إن وُجد)
 let attachMode = null;   // null | 'voice' | 'map' — المرفق المختار حاليًا بنموذج المشاركة
+let challengeMode = null; // null | 'text' | 'voice' | 'map' — طريقة الرد على تحدي اليوم
 
 /* ---------- تسجيل صوتي: يُخزَّن كـ Base64 داخل نفس مستند المشاركة
    (بدون Firebase Storage)، بسقف مدة قصير يضمن بقاء الحجم صغيرًا جدًا. ---------- */
@@ -370,6 +373,7 @@ function goBack(){
 async function openSubjectLessons(){
   if(!state.subjects.length){ showToast('المحتوى لسه ما تهيّأ من المعلمة.'); return; }
   const lessons = await fetchLessons(db, state.subjects[0].id).catch(() => []);
+  searchPool = null; // تحديث نتائج البحث بأحدث الشروحات المعتمدة بكل زيارة جديدة
   navigate('subjectLessons', {lessons});
 }
 async function openLesson(lessonId){
@@ -378,7 +382,8 @@ async function openLesson(lessonId){
     fetchPostsForLesson(db, lessonId, state.profile.uid).catch(() => []),
     fetchQuestionsWithAnswers(db, lessonId).catch(() => []),
   ]);
-  const posts = await attachLikeInfo(db, rawPosts, state.profile.uid).catch(() => rawPosts);
+  let posts = await attachLikeInfo(db, rawPosts, state.profile.uid).catch(() => rawPosts);
+  posts = await attachBookmarkInfo(db, posts, state.profile.uid).catch(() => posts);
   navigate('lessonDetail', {currentLesson: lesson, posts, questions});
 }
 async function handleLikePost(postId){
@@ -391,6 +396,36 @@ async function handleLikePost(postId){
   }catch(err){
     showToast('يبدو إنك سبق ووصلتِها بـ«أفادني».');
   }
+}
+async function handleToggleBookmark(postId){
+  const uid = state.profile.uid;
+  const inLesson = (state.posts || []).find(p => p.id === postId);
+  const inSaved = (state.savedPosts || []).find(p => p.id === postId);
+  const current = inLesson ? !!inLesson.bookmarked : (inSaved ? true : false);
+  try{
+    if(current){
+      await removeBookmark(db, postId, uid);
+      showToast('تم إلغاء الحفظ');
+    } else {
+      await addBookmark(db, postId, uid);
+      showToast('🔖 تم الحفظ، تقدرين ترجعين لها من «إنجازي»');
+    }
+    const flip = (list) => (list || []).map(p => p.id === postId ? {...p, bookmarked: !current} : p);
+    if(current && state.view === 'savedPosts'){
+      // إلغاء حفظ وإحنا بصفحة المحفوظات: تختفي من القائمة فورًا
+      setState({savedPosts: (state.savedPosts || []).filter(p => p.id !== postId)});
+    } else {
+      setState({posts: flip(state.posts), savedPosts: flip(state.savedPosts)});
+    }
+  }catch(err){
+    showToast('صار خطأ، حاولي مرة أخرى.');
+  }
+}
+async function openSavedPosts(){
+  setState({loading:true});
+  const savedPosts = await fetchBookmarkedPosts(db, state.profile.uid).catch(() => []);
+  setState({loading:false});
+  navigate('savedPosts', {savedPosts});
 }
 async function refreshHomeStats(){
   const myStats = await computeStudentPoints(db, state.profile.uid).catch(() => state.myStats);
@@ -432,7 +467,6 @@ async function handleSubmitPost(){
       subjectId: lesson ? lesson.subjectId : (state.subjects[0] && state.subjects[0].id),
       studentUid: state.profile.uid,
       studentName: state.profile.displayName,
-      type: state.postType,
       title,
       content,
       mindMap,
@@ -716,7 +750,7 @@ function viewStudentHome(){
         <img src="images/rocket.svg" class="challenge-rocket" alt="" aria-hidden="true">
         <div class="challenge-tag">🔥 تحدي اليوم</div>
         <div class="challenge-text">${state.challenge.text}</div>
-        <button class="btn challenge-btn" data-action="nav-share">أشارك بالتحدي ←</button>
+        <button class="btn challenge-btn" data-action="nav-challenge-share">أشارك بالتحدي ←</button>
       </div>` : ''}
 
       ${lessons.length ? `
@@ -744,31 +778,71 @@ function viewSubjectLessons(){
   return `
   <div class="content-app">
     ${pageHead('تعلّمي من زميلاتك', 'اختاري الدرس اللي تبين تشوفينه')}
-    ${subj ? `<div class="subject-tag">${subj.emoji} ${subj.name}</div>` : ''}
-    ${lessons.length ? `
-    <div class="lesson-list">
-      ${lessons.map((l, i) => `
-        <button class="lesson-row" data-action="nav-lesson" data-id="${l.id}">
-          <div class="lesson-ic">${subj ? subj.emoji : '📘'}</div>
-          <div class="lesson-mid"><div class="lesson-title">${l.title}</div><div class="lesson-meta">درس ${i+1}</div></div>
-          <span class="chev">←</span>
-        </button>`).join('')}
-    </div>` : `
-    <div class="empty-state"><span class="emoji">📭</span>ما فيه دروس بعد.</div>`}
+    <div class="field" style="margin-bottom:16px;">
+      <input type="search" id="lessonSearchInput" placeholder="🔍 ابحثي بعنوان الشرح أو نصه..." autocomplete="off">
+    </div>
+    <div id="searchResultsArea"></div>
+    <div id="lessonListArea">
+      ${subj ? `<div class="subject-tag">${subj.emoji} ${subj.name}</div>` : ''}
+      ${lessons.length ? `
+      <div class="lesson-list">
+        ${lessons.map((l, i) => `
+          <button class="lesson-row" data-action="nav-lesson" data-id="${l.id}">
+            <div class="lesson-ic">${subj ? subj.emoji : '📘'}</div>
+            <div class="lesson-mid"><div class="lesson-title">${l.title}</div><div class="lesson-meta">درس ${i+1}</div></div>
+            <span class="chev">←</span>
+          </button>`).join('')}
+      </div>` : `
+      <div class="empty-state"><span class="emoji">📭</span>ما فيه دروس بعد.</div>`}
+    </div>
   </div>`;
+}
+
+/* ---------- بحث: نصي بسيط بعنوان/نص الشرح، بدون أي خدمة خارجية ----------
+   نجيب كل الشروحات المعتمدة مرة وحدة ونخزّنها بالذاكرة، وكل بحث بعدها
+   فلترة فورية محليًا — بدون طلب شبكة جديد بكل حرف تكتبه الطالبة. */
+let searchPool = null;
+let searchDebounce = null;
+async function ensureSearchPool(){
+  if(searchPool) return searchPool;
+  searchPool = await fetchAllApprovedPosts(db).catch(() => []);
+  return searchPool;
+}
+async function renderSearchResults(term){
+  const results = document.getElementById('searchResultsArea');
+  const listArea = document.getElementById('lessonListArea');
+  if(!results || !listArea) return;
+  const q = term.trim();
+  if(!q){
+    results.innerHTML = '';
+    listArea.style.display = '';
+    return;
+  }
+  listArea.style.display = 'none';
+  results.innerHTML = `<div class="empty-state">⏳ جارِ البحث...</div>`;
+  const pool = await ensureSearchPool();
+  const needle = q.toLowerCase();
+  let matches = pool.filter(p =>
+    (p.title || '').toLowerCase().includes(needle) || (p.content || '').toLowerCase().includes(needle));
+  matches = await attachLikeInfo(db, matches, state.profile.uid).catch(() => matches);
+  matches = await attachBookmarkInfo(db, matches, state.profile.uid).catch(() => matches);
+  if(document.getElementById('lessonSearchInput') && document.getElementById('lessonSearchInput').value.trim() !== q) return; // تغيّر البحث أثناء الانتظار
+  results.innerHTML = matches.length
+    ? `<div class="section-title">🔍 ${matches.length} نتيجة</div>` + matches.map(p => postCard({...p, _searchResult:true})).join('')
+    : `<div class="empty-state"><span class="emoji">🔍</span>ما فيه نتائج لـ«${q}».</div>`;
 }
 
 function postCard(p){
   const isMine = state.profile && p.studentUid === state.profile.uid;
   const pending = p.status === 'pending';
-  const t = POST_TYPES[p.type] || {emoji:'📝', label:''};
+  const t = POST_TYPES[p.type]; // النوع صار اختياريًا؛ موجود فقط بمشاركات قديمة قبل هذا التحديث
   return `
   <div class="post-card">
     <div class="p-head">
-      <div class="badge sm" style="background:var(--primary-soft)">${t.emoji}</div>
+      <div class="badge sm" style="background:var(--primary-soft)">${t ? t.emoji : '💡'}</div>
       <div style="flex:1;">
         <div class="p-who">${p.studentName}${isMine ? ' (أنتِ)' : ''}</div>
-        <div class="p-meta">${t.label}</div>
+        ${(state.view==='savedPosts' || p._searchResult) ? `<div class="p-meta">${lessonTitleById(p.lessonId)}</div>` : (t ? `<div class="p-meta">${t.label}</div>` : '')}
       </div>
       ${pending ? `<span class="pending-tag">⏳ بانتظار الاعتماد</span>` : ''}
     </div>
@@ -777,9 +851,12 @@ function postCard(p){
     ${p.voiceNote && p.voiceNote.dataUrl ? `<audio controls src="${p.voiceNote.dataUrl}" class="post-audio"></audio>` : ''}
     ${mindMapBlock(p)}
     ${!pending ? `
-    <div style="margin-top:11px;">
+    <div style="margin-top:11px; display:flex; gap:8px;">
       <button class="pill-btn ${p.likedByMe?'liked':''}" data-action="like-post" data-id="${p.id}" ${p.likedByMe||isMine?'disabled':''}>
         💡 أفادني <span>${p.likesCount||0}</span>
+      </button>
+      <button class="pill-btn ${p.bookmarked?'saved':''}" data-action="toggle-bookmark" data-id="${p.id}">
+        ${p.bookmarked ? '🔖 محفوظ' : '🔖 احتفظي فيها'}
       </button>
     </div>` : ''}
   </div>`;
@@ -836,13 +913,6 @@ function viewSharePost(){
       </select>
     </div>
     <div class="field">
-      <label>نوع المشاركة</label>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        ${Object.entries(POST_TYPES).map(([key,t]) => `
-          <button type="button" class="type-chip ${state.postType===key?'selected':''}" data-action="pick-type" data-type="${key}">${t.emoji} ${t.label}</button>`).join('')}
-      </div>
-    </div>
-    <div class="field">
       <label>العنوان</label>
       <input type="text" id="postTitle" placeholder="مثال: أسهل طريقة أفهم فيها الدرس">
     </div>
@@ -869,6 +939,83 @@ function viewShareSuccess(){
       <button class="btn btn-primary" data-action="nav-student-home">رجوع للرئيسية</button>
     </div>
   </div>`;
+}
+
+function viewChallengeShare(){
+  const lessons = state.lessons || [];
+  const selected = state.shareLessonId || (lessons[0] && lessons[0].id) || '';
+  return `
+  <div class="content-app">
+    ${pageHead('🔥 تحدي اليوم', 'شاركي ردك بالطريقة اللي تناسبك')}
+    ${state.challenge && state.challenge.text ? `<div class="challenge-banner">${state.challenge.text}</div>` : ''}
+    <div class="field">
+      <label>الدرس المرتبط</label>
+      <select id="challengeLesson">
+        ${lessons.map(l => `<option value="${l.id}" ${l.id===selected?'selected':''}>${l.title}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field">
+      <label>كيف تبين تجاوبين؟</label>
+      <div id="challengeAttach"></div>
+    </div>
+    <button class="btn btn-coral" data-action="submit-challenge" ${state.loading?'disabled':''}>${state.loading?'جارِ الإرسال...':'إرسال للمعلمة'}</button>
+  </div>`;
+}
+function renderChallengeAttach(){
+  const box = document.getElementById('challengeAttach');
+  if(!box) return;
+  box.innerHTML = `
+    <div class="attach-toggle three">
+      <button type="button" class="attach-opt ${challengeMode==='text'?'selected':''}" data-action="pick-challenge-mode" data-mode="text">📝 نص</button>
+      <button type="button" class="attach-opt ${challengeMode==='voice'?'selected':''}" data-action="pick-challenge-mode" data-mode="voice">🎙️ صوت</button>
+      <button type="button" class="attach-opt ${challengeMode==='map'?'selected':''}" data-action="pick-challenge-mode" data-mode="map">🧠 خريطة</button>
+    </div>
+    ${challengeMode==='text' ? '<textarea id="challengeText" class="challenge-textarea" placeholder="اكتبي إجابتك هنا..."></textarea>' : ''}
+    ${challengeMode==='voice' ? '<div id="voiceArea" class="attach-body"></div>' : ''}
+    ${challengeMode==='map' ? '<div id="mapPreview" class="attach-body mm-preview"></div>' : ''}
+    ${!challengeMode ? '<div class="hint" style="text-align:center;">اختاري طريقة الإجابة فوق.</div>' : ''}`;
+  if(challengeMode === 'voice') renderVoiceArea();
+  if(challengeMode === 'map') renderMapPreview();
+}
+async function handleSubmitChallenge(){
+  const lessonId = document.getElementById('challengeLesson').value;
+  if(!challengeMode){ showToast('اختاري طريقة الإجابة أول (نص، صوت، أو خريطة).'); return; }
+  let content = '', mindMap = null, voice = null;
+  if(challengeMode === 'text'){
+    content = document.getElementById('challengeText').value.trim();
+    if(!content){ showToast('اكتبي إجابتك قبل الإرسال'); return; }
+  } else if(challengeMode === 'voice'){
+    if(mediaRecorder && mediaRecorder.state === 'recording'){ showToast('أوقفي التسجيل قبل الإرسال.'); return; }
+    if(!voiceNote){ showToast('سجّلي إجابتك الصوتية قبل الإرسال.'); return; }
+    if(voiceNote.dataUrl.length > 400000){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
+    voice = voiceNote;
+    content = '🔥 إجابة صوتية على تحدي اليوم';
+  } else if(challengeMode === 'map'){
+    if(!mapDoc || mmNodeCount(mapDoc) < 2){ showToast('أضيفي خريطتك الذهنية قبل الإرسال.'); return; }
+    mindMap = mmSerialize(mapDoc);
+    if(JSON.stringify(mindMap).length > 60000){ showToast('الخريطة كبيرة جدًا، قلّلي عدد العقد.'); return; }
+    content = '🔥 إجابة بخريطة ذهنية على تحدي اليوم';
+  }
+  setState({loading:true});
+  try{
+    const lesson = (state.lessons || []).find(l => l.id === lessonId);
+    await createPost(db, {
+      lessonId,
+      subjectId: lesson ? lesson.subjectId : (state.subjects[0] && state.subjects[0].id),
+      studentUid: state.profile.uid,
+      studentName: state.profile.displayName,
+      title: '🔥 تحدي اليوم',
+      content,
+      mindMap,
+      voiceNote: voice,
+    });
+    mapDoc = null; voiceNote = null; challengeMode = null;
+    setState({loading:false});
+    navigate('shareSuccess');
+  }catch(err){
+    setState({loading:false});
+    showToast('صار خطأ أثناء الإرسال، حاولي مرة أخرى.');
+  }
 }
 
 function viewAskQuestion(){
@@ -928,7 +1075,22 @@ function viewAchievements(){
           <div style="color:var(--primary); font-weight:700; font-size:12.5px;">${st.points} نقطة</div>
         </div>`).join('') : `<div class="empty-state">ولا طالبة سجّلت نقاط لسه.</div>`}
     </div>
+    <button class="role-card" data-action="nav-saved-posts" style="margin-top:4px;">
+      <div class="badge" style="background:var(--coral-soft)">🔖</div>
+      <div><div class="r-title">شروحات محفوظة</div><div class="r-sub">ارجعي للشروحات اللي احتفظتِ فيها</div></div>
+      <span class="chev">←</span>
+    </button>
     <button class="link-btn" data-action="logout">تسجيل الخروج</button>
+  </div>`;
+}
+
+function viewSavedPosts(){
+  const posts = state.savedPosts || [];
+  return `
+  <div class="content-app">
+    ${pageHead('🔖 شروحات محفوظة', 'الشروحات اللي احتفظتِ فيها عشان ترجعين لها بسهولة')}
+    ${posts.length ? posts.map(postCard).join('') : `
+      <div class="empty-state"><span class="emoji">🔖</span>ما حفظتِ أي شرح بعد. اضغطي «🔖 احتفظي فيها» تحت أي شرح يعجبك.</div>`}
   </div>`;
 }
 
@@ -987,14 +1149,14 @@ function viewTeacherHome(){
 }
 
 function pendingPostCard(p){
-  const t = POST_TYPES[p.type] || {emoji:'📝', label:''};
+  const t = POST_TYPES[p.type];
   return `
   <div class="post-card">
     <div class="p-head">
-      <div class="badge sm" style="background:var(--primary-soft)">${t.emoji}</div>
+      <div class="badge sm" style="background:var(--primary-soft)">${t ? t.emoji : '💡'}</div>
       <div style="flex:1;">
         <div class="p-who">${p.studentName}</div>
-        <div class="p-meta">${t.label} · ${lessonTitleById(p.lessonId)}</div>
+        <div class="p-meta">${t ? t.label + ' · ' : ''}${lessonTitleById(p.lessonId)}</div>
       </div>
     </div>
     ${p.title ? `<div class="p-title">${p.title}</div>` : ''}
@@ -1065,7 +1227,7 @@ function viewTeacherStats(){
 /* ---------- main render ---------- */
 function render(){
   const app = document.getElementById('app');
-  if(state.view !== 'sharePost' && mediaStream){
+  if(state.view !== 'sharePost' && state.view !== 'challengeShare' && mediaStream){
     stopRecording();
     if(mediaStream){ mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
   }
@@ -1079,10 +1241,12 @@ function render(){
   if(state.view === 'subjectLessons'){ app.innerHTML = viewSubjectLessons() + studentNav(); return; }
   if(state.view === 'lessonDetail'){ app.innerHTML = viewLessonDetail() + studentNav(); return; }
   if(state.view === 'sharePost'){ app.innerHTML = viewSharePost() + studentNav(); renderAttachArea(); return; }
+  if(state.view === 'challengeShare'){ app.innerHTML = viewChallengeShare() + studentNav(); renderChallengeAttach(); return; }
   if(state.view === 'shareSuccess'){ app.innerHTML = viewShareSuccess() + studentNav(); return; }
   if(state.view === 'askQuestion'){ app.innerHTML = viewAskQuestion() + studentNav(); return; }
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
   if(state.view === 'achievements'){ app.innerHTML = viewAchievements() + studentNav(); return; }
+  if(state.view === 'savedPosts'){ app.innerHTML = viewSavedPosts() + studentNav(); return; }
   if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
   if(state.view === 'teacherReview'){ app.innerHTML = viewTeacherReview() + teacherNav(); return; }
   if(state.view === 'teacherStats'){ app.innerHTML = viewTeacherStats() + teacherNav(); return; }
@@ -1094,6 +1258,14 @@ document.addEventListener('change', (e) => {
   if(e.target.id === 'postLesson'){
     state.shareLessonId = e.target.value;
     if(mapDoc && mmSetDefaultTitle(mapDoc, lessonTitleById(e.target.value))) renderMapPreview();
+  }
+});
+
+document.addEventListener('input', (e) => {
+  if(e.target.id === 'lessonSearchInput'){
+    const term = e.target.value;
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => renderSearchResults(term), 300);
   }
 });
 
@@ -1138,8 +1310,14 @@ document.addEventListener('click', (e) => {
     attachMode = null;
     voiceNote = null;
     if(mediaRecorder && mediaRecorder.state !== 'inactive') stopRecording();
-    setState({postType:'quick'});
     navigate('sharePost');
+  } else if(action === 'nav-challenge-share'){
+    state.shareLessonId = state.lessons[0] ? state.lessons[0].id : '';
+    challengeMode = null;
+    mapDoc = null;
+    voiceNote = null;
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') stopRecording();
+    navigate('challengeShare');
   } else if(action === 'pick-attach'){
     const mode = el.dataset.mode;
     if(mediaRecorder && mediaRecorder.state !== 'inactive') stopRecording();
@@ -1168,14 +1346,20 @@ document.addEventListener('click', (e) => {
     openQuestionsList();
   } else if(action === 'nav-achievements'){
     openAchievements();
+  } else if(action === 'nav-saved-posts'){
+    openSavedPosts();
   } else if(action === 'like-post'){
     handleLikePost(el.dataset.id);
-  } else if(action === 'pick-type'){
-    state.postType = el.dataset.type;
-    document.querySelectorAll('.type-chip').forEach(c => c.classList.remove('selected'));
-    el.classList.add('selected');
+  } else if(action === 'toggle-bookmark'){
+    handleToggleBookmark(el.dataset.id);
   } else if(action === 'submit-post'){
     handleSubmitPost();
+  } else if(action === 'pick-challenge-mode'){
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') stopRecording();
+    challengeMode = (challengeMode === el.dataset.mode) ? null : el.dataset.mode;
+    renderChallengeAttach();
+  } else if(action === 'submit-challenge'){
+    handleSubmitChallenge();
   } else if(action === 'submit-question'){
     handleSubmitQuestion();
   } else if(action === 'toggle-question'){
