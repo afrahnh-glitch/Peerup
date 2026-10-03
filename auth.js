@@ -33,6 +33,20 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 /* ---------- state ---------- */
+function effectiveTheme(){
+  const stored = document.documentElement.getAttribute('data-theme');
+  if(stored) return stored;
+  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+}
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  try{ localStorage.setItem('peerup-theme', theme); }catch(_e){ /* تخزين محلي غير متاح، نكمل بدونه */ }
+}
+function toggleTheme(){
+  applyTheme(effectiveTheme() === 'dark' ? 'light' : 'dark');
+  setState({});
+}
+
 const state = {
   view: 'loading',      // loading | landing | authForm | studentHome | subjectLessons | lessonDetail | teacherHome
   role: null,            // 'student' | 'teacher'  (chosen on the landing screen)
@@ -719,7 +733,10 @@ function viewStudentHome(){
       <img src="images/stars.svg" class="hero-stars" alt="" aria-hidden="true">
       <div class="hero-top">
         <div class="brand-mini"><div class="bm-mark">P</div><div class="bm-name">PeerUp</div></div>
-        <div class="hero-avatar">👩‍🚀</div>
+        <div class="hero-end">
+          <button class="theme-toggle" data-action="toggle-theme" aria-label="تبديل الوضع الداكن">${effectiveTheme()==='dark'?'☀️':'🌙'}</button>
+          <div class="hero-avatar">👩‍🚀</div>
+        </div>
       </div>
       <h1>صباح الخير، ${p.displayName || ''} 👋</h1>
       <p class="sub">وش ودك تسوين اليوم؟</p>
@@ -1107,6 +1124,7 @@ function viewTeacherHome(){
   return `
   <div class="content-app">
     <div class="dash-header">
+      <button class="theme-toggle theme-toggle-abs" data-action="toggle-theme" aria-label="تبديل الوضع الداكن">${effectiveTheme()==='dark'?'☀️':'🌙'}</button>
       <div class="dash-avatar">${(p.displayName||'?')[0]}</div>
       <h2 style="margin:0;">${p.displayName || ''}</h2>
       <span class="role-chip teacher">👩🏻‍🏫 معلمة</span>
@@ -1274,7 +1292,7 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('click', (e) => {
-  const el = e.target.closest('[data-action]');
+  const el = e.target && e.target.closest ? e.target.closest('[data-action]') : null;
   if(!el) return;
   const action = el.dataset.action;
   if(action === 'choose-role'){
@@ -1283,6 +1301,8 @@ document.addEventListener('click', (e) => {
     setState({view:'landing', error:'', success:''});
   } else if(action === 'set-mode'){
     setState({mode: el.dataset.mode, error:'', success:''});
+  } else if(action === 'toggle-theme'){
+    toggleTheme();
   } else if(action === 'logout'){
     handleLogout();
   } else if(action === 'back'){
@@ -1418,12 +1438,12 @@ document.addEventListener('submit', (e) => {
    الفأرة، بدل الاعتماد على :active وحدها (غير موثوق دائمًا على iOS). */
 const PRESS_SEL = '.btn, .role-card, .list-row, .pill-btn, .navitem, .qa-card, .lesson-row';
 document.addEventListener('pointerdown', (e) => {
-  const el = e.target.closest(PRESS_SEL);
+  const el = e.target && e.target.closest ? e.target.closest(PRESS_SEL) : null;
   if(el && !el.disabled) el.classList.add('pressed');
 });
 ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => {
   document.addEventListener(evt, (e) => {
-    const el = e.target.closest(PRESS_SEL);
+    const el = e.target && e.target.closest ? e.target.closest(PRESS_SEL) : null;
     if(el) el.classList.remove('pressed');
   });
 });
