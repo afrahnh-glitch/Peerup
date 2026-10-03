@@ -179,18 +179,35 @@ export async function getLikesCount(db, postId){
   const snap = await getDocs(q);
   return snap.size;
 }
+// بدل قراءة "أفادني" لكل مشاركة لحالها (كانت تعني N طلب شبكة لكل درس فيه
+// N شرح، وهذا سبب بطء حقيقي لاحظته المعلمة) — نجيب كل تفاعلات مجموعة
+// مشاركات معيّنة بطلب واحد فقط عبر عامل "in" (حده الأقصى 30 قيمة، يكفي
+// بسهولة لدرس أو لشروحات طالبة وحدة)، ونحسب العدّاد والإعجاب الشخصي محليًا.
+async function fetchLikeCountsAndMine(db, postIds, uid){
+  if(!postIds.length) return {counts: {}, mine: new Set()};
+  const ids = postIds.slice(0, 30);
+  let docs = [];
+  try{
+    const snap = await getDocs(query(collection(db, 'interactions'), where('postId', 'in', ids)));
+    docs = snap.docs;
+  }catch(err){ /* تراجع آمن: تظهر المشاركات بدون عدّاد بدل ما تنكسر الصفحة */ }
+  const counts = {}; const mine = new Set();
+  docs.forEach(d => {
+    const data = d.data();
+    counts[data.postId] = (counts[data.postId] || 0) + 1;
+    if(uid && data.studentUid === uid) mine.add(data.postId);
+  });
+  return {counts, mine};
+}
 export async function likePost(db, postId, uid){
   await setDoc(doc(db, 'interactions', `${postId}_${uid}`), {
     postId, studentUid: uid, createdAt: serverTimestamp(),
   });
 }
 export async function attachLikeInfo(db, posts, uid){
-  return Promise.all(posts.map(async (p) => {
-    const [likedByMe, likesCount] = await Promise.all([
-      hasLiked(db, p.id, uid), getLikesCount(db, p.id),
-    ]);
-    return {...p, likedByMe, likesCount};
-  }));
+  if(!posts.length) return posts;
+  const {counts, mine} = await fetchLikeCountsAndMine(db, posts.map(p => p.id), uid);
+  return posts.map(p => ({...p, likedByMe: mine.has(p.id), likesCount: counts[p.id] || 0}));
 }
 
 // نحسب PeerPoints مباشرة من البيانات الحقيقية بدل تخزينها كرقم قابل للتعديل:
@@ -201,8 +218,8 @@ export async function computeStudentPoints(db, uid){
     fetchAnswersByStudent(db, uid),
   ]);
   const approvedPosts = myPosts.filter(p => p.status === 'approved');
-  const likeCounts = await Promise.all(approvedPosts.map(p => getLikesCount(db, p.id)));
-  const likesReceived = likeCounts.reduce((s, n) => s + n, 0);
+  const {counts: likeCountsByPost} = await fetchLikeCountsAndMine(db, approvedPosts.map(p => p.id), null);
+  const likesReceived = approvedPosts.reduce((s, p) => s + (likeCountsByPost[p.id] || 0), 0);
 
   const questionIds = [...new Set(myAnswers.map(a => a.questionId))];
   const questionSnaps = await Promise.all(questionIds.map(qid => getDoc(doc(db, 'questions', qid))));
@@ -247,8 +264,18 @@ export async function addBookmark(db, postId, uid){
 export async function removeBookmark(db, postId, uid){
   await deleteDoc(doc(db, 'bookmarks', `${postId}_${uid}`));
 }
+// نفس فكرة fetchLikeCountsAndMine: طلب واحد يجيب كل مشاركات الطالبة
+// المحفوظة (محصور بـstudentUid فقط، بدون فهرس مركّب)، بدل قراءة منفصلة
+// لكل مشاركة على حدة.
 export async function attachBookmarkInfo(db, posts, uid){
-  return Promise.all(posts.map(async (p) => ({...p, bookmarked: await hasBookmarked(db, p.id, uid)})));
+  if(!posts.length) return posts;
+  let docs = [];
+  try{
+    const snap = await getDocs(query(collection(db, 'bookmarks'), where('studentUid', '==', uid)));
+    docs = snap.docs;
+  }catch(err){ /* تراجع آمن */ }
+  const mine = new Set(docs.map(d => d.data().postId));
+  return posts.map(p => ({...p, bookmarked: mine.has(p.id)}));
 }
 // تُرجع الشروحات المحفوظة الحقيقية مرتّبة بالأحدث حفظًا أولًا، وتتجاهل
 // بصمت أي بوكمارك يشير لمشاركة اتحذفت لاحقًا.
