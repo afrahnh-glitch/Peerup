@@ -336,19 +336,21 @@ async function loadProfileAndGo(uid){
     return;
   }
   const profile = snap.data();
-  const subjects = await fetchSubjects(db).catch(() => []);
+  // نجيب كل شي ما يعتمد على نتيجة شي ثاني بنفس الوقت بدل الواحد ورا الثاني
+  // (هذا كان سبب جزء من البطء: كل طلب ينتظر اللي قبله بدون داعٍ).
+  const [subjects, challenge, roleSpecific] = await Promise.all([
+    fetchSubjects(db).catch(() => []),
+    fetchChallenge(db).catch(() => null),
+    profile.role === 'teacher'
+      ? fetchPendingPosts(db).catch(() => [])
+      : computeStudentPoints(db, uid).catch(() => null),
+  ]);
   let lessons = [];
   if(subjects.length){
     lessons = await fetchLessons(db, subjects[0].id).catch(() => []);
   }
-  let pendingPosts = [];
-  let myStats = null;
-  const challenge = await fetchChallenge(db).catch(() => null);
-  if(profile.role === 'teacher'){
-    pendingPosts = await fetchPendingPosts(db).catch(() => []);
-  } else {
-    myStats = await computeStudentPoints(db, uid).catch(() => null);
-  }
+  const pendingPosts = profile.role === 'teacher' ? roleSpecific : [];
+  const myStats = profile.role === 'teacher' ? null : roleSpecific;
   setState({
     loading:false, profile, subjects, lessons, pendingPosts, myStats, challenge, history:[],
     view: profile.role === 'teacher' ? 'teacherHome' : 'studentHome',
