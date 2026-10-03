@@ -66,7 +66,7 @@ export async function seedInitialContent(db){
 // مشاركة واحدة تحمل أحدهما أو ولا شي، مو الاثنين معًا.
 export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, mindMap, voiceNote}){
   const docRef = await addDoc(collection(db, 'posts'), {
-    lessonId, subjectId, studentUid, studentName, type, title, content,
+    lessonId, subjectId, studentUid, studentName, type: type || null, title, content,
     mindMap: (mindMap && mindMap.nodes && mindMap.nodes.length > 1) ? mindMap : null,
     voiceNote: (voiceNote && voiceNote.dataUrl) ? voiceNote : null,
     status: 'pending', likes: 0,
@@ -225,6 +225,43 @@ export async function computeStudentPoints(db, uid){
 
 // لوحة المتصدرين: كل الطالبات مع نقاطهن، الأعلى أول. (تراكمية حاليًا،
 // وليست بحساب أسبوعي منفصل — تبسيط مقصود بهذي المرحلة.)
+// لكل الشروحات المعتمدة (عبر كل الدروس) — تُستخدم للبحث بالعنوان/النص.
+// فلتر مساواة واحد (status=='approved')، آمن لأي طالبة تطابق أول شرط بالقاعدة.
+export async function fetchAllApprovedPosts(db){
+  const q = query(collection(db, 'posts'), where('status', '==', 'approved'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({id: d.id, ...d.data()}));
+}
+
+/* ================= المحفوظات: حفظ شروحات للرجوع لها لاحقًا ================= */
+
+export async function hasBookmarked(db, postId, uid){
+  const snap = await getDoc(doc(db, 'bookmarks', `${postId}_${uid}`));
+  return snap.exists();
+}
+export async function addBookmark(db, postId, uid){
+  await setDoc(doc(db, 'bookmarks', `${postId}_${uid}`), {
+    postId, studentUid: uid, createdAt: serverTimestamp(), createdAtMs: Date.now(),
+  });
+}
+export async function removeBookmark(db, postId, uid){
+  await deleteDoc(doc(db, 'bookmarks', `${postId}_${uid}`));
+}
+export async function attachBookmarkInfo(db, posts, uid){
+  return Promise.all(posts.map(async (p) => ({...p, bookmarked: await hasBookmarked(db, p.id, uid)})));
+}
+// تُرجع الشروحات المحفوظة الحقيقية مرتّبة بالأحدث حفظًا أولًا، وتتجاهل
+// بصمت أي بوكمارك يشير لمشاركة اتحذفت لاحقًا.
+export async function fetchBookmarkedPosts(db, uid){
+  const q = query(collection(db, 'bookmarks'), where('studentUid', '==', uid));
+  const snap = await getDocs(q);
+  const marks = snap.docs
+    .map(d => d.data())
+    .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+  const posts = await Promise.all(marks.map(m => getDoc(doc(db, 'posts', m.postId))));
+  return posts.filter(s => s.exists()).map(s => ({id: s.id, ...s.data(), bookmarked: true}));
+}
+
 /* ================= المرحلة 6: تحدي اليوم + إحصائيات المعلمة ================= */
 
 // مستند واحد بمعرّف ثابت (current) — أي طالبة تقرأه، المعلمة فقط تكتبه.
