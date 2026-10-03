@@ -1,3 +1,4 @@
+
 :root{
   --shell-w: 440px;
 
@@ -28,6 +29,50 @@
   --radius-md: 18px;
   --shadow-soft: 0 14px 34px -18px rgba(23,37,84,.22);
   --glow-primary: 0 8px 22px -8px rgba(124,92,252,.45);
+
+  /* نصوص ثابتة فوق خلفيات -soft فاتحة بطبيعتها (تُستبدل بالوضع الداكن) */
+  --on-skyblue-soft: #1D5C82;
+  --on-mint-soft: #1E7A5B;
+}
+
+/* ==================================================================
+   الوضع الداكن — نفس هوية PeerUp (بنفسجي × سماوي × فضائي) بخلفية داكنة.
+   كل مكوّن بالتطبيق مبني على هذي المتغيرات، فتبديلها يكفي لتلوين كل شي
+   عدا محرر الخريطة الذهنية (mindmap.js يحمل تنسيقه الخاص المستقل).
+   ================================================================== */
+:root[data-theme="dark"]{
+  --ink: #ECE9FA;
+  --ink-soft: #ABA3C9;
+  --ink-faint: #756E96;
+  --bg-page: #0E0A1C;
+  --bg: #150F28;
+  --surface: #1C1536;
+  --border: #2E2650;
+  --primary: #9B86FF;
+  --primary-soft: #2A2150;
+  --lavender: #2A2150;
+  --skyblue: #7DD3FF;
+  --skyblue-soft: #16304A;
+  --mint-soft: #16342B;
+  --mint: #4FCB9C;
+  --coral-soft: #3A2419;
+  --coral: #FF9B6B;
+  --danger: #FF8A75;
+  --danger-soft: #3A1E18;
+  --on-skyblue-soft: #BFE3FF;
+  --on-mint-soft: #A8F0D5;
+  --shadow-soft: 0 14px 34px -18px rgba(0,0,0,.55);
+}
+@media(prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ink: #ECE9FA; --ink-soft: #ABA3C9; --ink-faint: #756E96;
+    --bg-page: #0E0A1C; --bg: #150F28; --surface: #1C1536; --border: #2E2650;
+    --primary: #9B86FF; --primary-soft: #2A2150; --lavender: #2A2150;
+    --skyblue: #7DD3FF; --skyblue-soft: #16304A; --mint-soft: #16342B; --mint: #4FCB9C;
+    --coral-soft: #3A2419; --coral: #FF9B6B; --danger: #FF8A75; --danger-soft: #3A1E18;
+    --on-skyblue-soft: #BFE3FF; --on-mint-soft: #A8F0D5;
+    --shadow-soft: 0 14px 34px -18px rgba(0,0,0,.55);
+  }
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
@@ -330,6 +375,14 @@ input{font-family:inherit;}
 .hero-stars{position:absolute; right:6px; top:8px; width:70px; height:70px; opacity:.8; pointer-events:none; animation:heroTwinkle 3.4s ease-in-out infinite;}
 @keyframes heroFloat{0%,100%{transform:translateY(0) rotate(0deg);} 50%{transform:translateY(-8px) rotate(-4deg);}}
 @keyframes heroTwinkle{0%,100%{opacity:.5; transform:scale(.94);} 50%{opacity:1; transform:scale(1.04);}}
+.hero-end{display:flex; align-items:center; gap:8px;}
+.theme-toggle{
+  width:34px; height:34px; border-radius:50%; border:1px solid rgba(255,255,255,.35);
+  background:rgba(255,255,255,.14); backdrop-filter:blur(6px); font-size:15px;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.dash-header{position:relative;}
+.theme-toggle-abs{position:absolute; top:0; left:0; border-color:var(--border); background:var(--surface); color:var(--ink);}
 .hero-avatar{
   width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,.18);
   display:flex; align-items:center; justify-content:center; font-size:16px;
