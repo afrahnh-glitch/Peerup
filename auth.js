@@ -645,7 +645,7 @@ function studentNav(){
   <div class="bottomnav">
     <button class="navitem ${active('studentHome')}" data-action="nav-student-home"><span class="ic-wrap">🏠</span>الرئيسية</button>
     <button class="navitem ${active('subjectLessons')||active('lessonDetail')}" data-action="nav-lessons"><span class="ic-wrap">📚</span>الدروس</button>
-    <button class="navitem" data-action="nav-share"><span class="nav-raised">💡</span></button>
+    <button class="navitem" data-action="nav-share"><span class="nav-raised">💡</span>إضافة</button>
     <button class="navitem ${active('questionsList')}" data-action="nav-questions-list"><span class="ic-wrap">🆘</span>الأسئلة</button>
     <button class="navitem ${active('achievements')}" data-action="nav-achievements"><span class="ic-wrap">🏆</span>إنجازي</button>
   </div>`;
