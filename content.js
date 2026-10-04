@@ -1,6 +1,6 @@
 import {
   collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp
+  query, where, orderBy, serverTimestamp, documentId
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 export async function fetchSubjects(db){
@@ -251,6 +251,40 @@ export async function fetchAllApprovedPosts(db){
   return snap.docs.map(d => ({id: d.id, ...d.data()}));
 }
 
+/* ================= صورة الملف الشخصي (Avatar) ================= */
+
+// avatarId: اختيار جاهز من المجموعة المدمجة بالمشروع (أو null لإلغائه).
+// avatarUrl: رابط صورة مرفوعة من الجهاز (أو null). الاثنان متعارضان —
+// تحديد أحدهما يمسح الآخر تلقائيًا.
+export async function setAvatar(db, uid, {avatarId, avatarUrl}){
+  await updateDoc(doc(db, 'users', uid), {
+    avatarId: avatarId || null,
+    avatarUrl: avatarUrl || null,
+  });
+}
+
+// يجيب avatarId/avatarUrl لمجموعة طالبات دفعة وحدة (حد أقصى 30، يكفي
+// بسهولة لقائمة شروحات أو أسئلة بصفحة واحدة) — نفس أسلوب الدُفعات
+// المستخدم للإعجابات والمحفوظات، لضمان صورة محدّثة دائمًا بدل نسخة قديمة.
+export async function fetchAvatarsFor(db, uids){
+  const unique = [...new Set(uids)].filter(Boolean).slice(0, 30);
+  if(!unique.length) return {};
+  let docs = [];
+  try{
+    const snap = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', unique)));
+    docs = snap.docs;
+  }catch(err){ /* تراجع آمن: تظهر الحروف الافتراضية بدل ما تنكسر الصفحة */ }
+  const map = {};
+  docs.forEach(d => { const v = d.data(); map[d.id] = {avatarId: v.avatarId || null, avatarUrl: v.avatarUrl || null}; });
+  return map;
+}
+// يُطبِّق الخريطة فوق أي قائمة عناصر فيها studentUid (مشاركات/أسئلة)
+export async function attachAvatarInfo(db, items, uidField = 'studentUid'){
+  if(!items.length) return items;
+  const map = await fetchAvatarsFor(db, items.map(i => i[uidField]));
+  return items.map(i => ({...i, authorAvatarId: (map[i[uidField]]||{}).avatarId || null, authorAvatarUrl: (map[i[uidField]]||{}).avatarUrl || null}));
+}
+
 /* ================= المحفوظات: حفظ شروحات للرجوع لها لاحقًا ================= */
 
 export async function hasBookmarked(db, postId, uid){
@@ -352,7 +386,7 @@ export async function computeTeacherStats(db){
 export async function fetchLeaderboard(db, limitN){
   const q = query(collection(db, 'users'), where('role', '==', 'student'));
   const snap = await getDocs(q);
-  const students = snap.docs.map(d => ({uid: d.id, displayName: d.data().displayName}));
+  const students = snap.docs.map(d => ({uid: d.id, displayName: d.data().displayName, avatarId: d.data().avatarId || null, avatarUrl: d.data().avatarUrl || null}));
   const withPoints = await Promise.all(students.map(async (s) => ({
     ...s, ...(await computeStudentPoints(db, s.uid)),
   })));
