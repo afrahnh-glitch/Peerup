@@ -74,7 +74,7 @@ function avatarHtml(obj, size = 44){
   const aid = obj.avatarId || obj.authorAvatarId;
   const style = `width:${size}px; height:${size}px; border-radius:50%; flex-shrink:0; object-fit:cover; display:block;`;
   if(url) return `<img src="${url}" class="avatar-img" alt="" style="${style}">`;
-  if(aid && AVATAR_IDS.includes(aid)) return `<img src="images/avatars/${aid}.svg" class="avatar-img" alt="" style="${style}">`;
+  if(aid && AVATAR_IDS.includes(aid)) return `<img src="images/${aid}.svg" class="avatar-img" alt="" style="${style}">`;
   const fs = Math.round(size * 0.42);
   return `<div class="avatar-fallback" style="${style} display:flex; align-items:center; justify-content:center; font-size:${fs}px;">${(name[0]||'?')}</div>`;
 }
@@ -1327,7 +1327,7 @@ function avatarModalHtml(){
       <div class="avatar-grid">
         ${AVATAR_IDS.map(id => `
           <button class="avatar-opt ${current===id?'selected':''}" data-action="pick-avatar" data-id="${id}">
-            <img src="images/avatars/${id}.svg" alt="">
+            <img src="images/${id}.svg" alt="">
             ${current===id ? `<span class="avatar-check">${icon('check',12)}</span>` : ''}
           </button>`).join('')}
       </div>
