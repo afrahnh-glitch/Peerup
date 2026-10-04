@@ -161,7 +161,7 @@ input{font-family:inherit;}
   box-shadow:0 6px 14px -12px rgba(23,37,84,.18); transition:transform .15s ease, box-shadow .15s ease;
 }
 .lesson-row:hover{transform:translateY(-1px); box-shadow:0 8px 14px -12px rgba(124,92,252,.22);}
-.lesson-ic{width:38px; height:38px; border-radius:12px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:17px; background:var(--primary-soft);}
+.lesson-ic{width:38px; height:38px; border-radius:12px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:800; color:var(--primary); background:var(--primary-soft); font-family:'El Messiri',sans-serif;}
 .lesson-mid{flex:1; min-width:0;}
 .lesson-title{font-weight:700; font-size:13.5px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .lesson-meta{font-size:11px; color:var(--ink-soft); margin-top:1px;}
