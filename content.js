@@ -64,11 +64,12 @@ export async function seedInitialContent(db){
 // voiceNote: تسجيل صوتي قصير اختياري {dataUrl, duration}
 // كلاهما يُخزَّن داخل نفس المستند (بدون Storage)، وهما بديلان لبعض —
 // مشاركة واحدة تحمل أحدهما أو ولا شي، مو الاثنين معًا.
-export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, mindMap, voiceNote}){
+export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, mindMap, voiceNote, imageUrl}){
   const docRef = await addDoc(collection(db, 'posts'), {
     lessonId, subjectId, studentUid, studentName, type: type || null, title, content,
     mindMap: (mindMap && mindMap.nodes && mindMap.nodes.length > 1) ? mindMap : null,
     voiceNote: (voiceNote && voiceNote.dataUrl) ? voiceNote : null,
+    imageUrl: imageUrl || null,
     status: 'pending', likes: 0,
     createdAt: serverTimestamp(), createdAtMs: Date.now(),
   });
