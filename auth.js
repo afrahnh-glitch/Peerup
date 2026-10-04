@@ -898,8 +898,8 @@ function viewStudentHome(){
       <div class="lesson-list">
         ${lessons.map((l, i) => `
           <button class="lesson-row" data-action="nav-lesson" data-id="${l.id}">
-            <div class="lesson-ic">${subj ? subj.emoji : '📘'}</div>
-            <div class="lesson-mid"><div class="lesson-title">${l.title}</div><div class="lesson-meta">درس ${i+1}</div></div>
+            <div class="lesson-ic">${i + 1}</div>
+            <div class="lesson-mid"><div class="lesson-title">${l.title}</div></div>
             <span class="chev">←</span>
           </button>`).join('')}
       </div>` : `
@@ -929,8 +929,8 @@ function viewSubjectLessons(){
       <div class="lesson-list">
         ${lessons.map((l, i) => `
           <button class="lesson-row" data-action="nav-lesson" data-id="${l.id}">
-            <div class="lesson-ic">${subj ? subj.emoji : '📘'}</div>
-            <div class="lesson-mid"><div class="lesson-title">${l.title}</div><div class="lesson-meta">درس ${i+1}</div></div>
+            <div class="lesson-ic">${i + 1}</div>
+            <div class="lesson-mid"><div class="lesson-title">${l.title}</div></div>
             <span class="chev">←</span>
           </button>`).join('')}
       </div>` : `
