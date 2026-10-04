@@ -626,7 +626,8 @@ onAuthStateChanged(auth, async (user) => {
 function brandHeader(sub){
   return `
   <div class="brand-center">
-    <div class="brand-mark">P</div>
+    <img src="images/logo.png" class="brand-mark brand-mark-light" alt="PeerUp">
+    <img src="images/logo-white.png" class="brand-mark brand-mark-dark" alt="PeerUp">
     <div class="bname">PeerUp</div>
     <div class="tag">نرتقي معًا</div>
     ${sub ? `<div class="slogan">${sub}</div>` : ''}
@@ -732,7 +733,7 @@ function viewStudentHome(){
       <img src="images/planet.svg" class="hero-planet" alt="" aria-hidden="true">
       <img src="images/stars.svg" class="hero-stars" alt="" aria-hidden="true">
       <div class="hero-top">
-        <div class="brand-mini"><div class="bm-mark">P</div><div class="bm-name">PeerUp</div></div>
+        <div class="brand-mini"><img src="images/logo-white.png" class="bm-mark" alt="PeerUp"><div class="bm-name">PeerUp</div></div>
         <div class="hero-end">
           <button class="theme-toggle" data-action="toggle-theme" aria-label="تبديل الوضع الداكن">${effectiveTheme()==='dark'?'☀️':'🌙'}</button>
           <div class="hero-avatar">👩‍🚀</div>
