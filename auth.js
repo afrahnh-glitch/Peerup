@@ -250,12 +250,12 @@ function renderPhotoArea(){
         <label class="pill-btn" for="photoInput">🔁 استبدال الصورة</label>
         <button type="button" class="pill-btn" data-action="discard-photo">🗑️ حذف</button>
       </div>
-      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">`;
+      <input type="file" id="photoInput" accept="image/*" style="display:none;">`;
   } else {
     box.innerHTML = `
       <label class="btn btn-primary" for="photoInput" style="display:flex; cursor:pointer;">📷 اختاري أو صوّري صورة</label>
       <div class="hint" style="text-align:center; margin-top:6px;">تُضغط تلقائيًا قبل الرفع</div>
-      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">`;
+      <input type="file" id="photoInput" accept="image/*" style="display:none;">`;
   }
 }
 
