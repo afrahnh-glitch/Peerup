@@ -179,6 +179,9 @@ input{font-family:inherit;}
   width:100%; border:1.5px solid var(--border); border-radius:13px; padding:12px 13px;
   font-size:14px; background:var(--surface); color:var(--ink); transition:border-color .15s ease, box-shadow .15s ease;
 }
+.search-wrap{position:relative;}
+.search-wrap .icon{position:absolute; top:50%; right:13px; transform:translateY(-50%); color:var(--ink-faint); pointer-events:none;}
+.search-wrap input{padding-right:36px;}
 .field input:focus{outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(124,92,252,.15);}
 .field .hint{font-size:11.5px; color:var(--ink-faint); margin-top:5px;}
 .field textarea, .field select{
@@ -218,6 +221,7 @@ input{font-family:inherit;}
 .attach-opt{
   flex:1; border:1.5px solid var(--border); background:var(--surface); border-radius:13px;
   padding:11px 8px; font-size:12.8px; font-weight:700; color:var(--ink-soft);
+  display:flex; align-items:center; justify-content:center; gap:5px;
 }
 .attach-opt.selected{background:var(--primary); color:#fff; border-color:var(--primary);}
 .attach-body{background:var(--surface); border:1.5px dashed var(--border); border-radius:16px; padding:16px; text-align:center;}
@@ -454,6 +458,7 @@ input{font-family:inherit;}
 .navitem{display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; color:var(--ink-faint); font-size:10px; font-weight:700; padding:5px 8px; border-radius:12px; transition:background .15s ease, color .15s ease;}
 .navitem.active{color:var(--primary); background:var(--lavender);}
 .navitem .ic-wrap{height:20px; display:flex; align-items:center; font-size:18px;}
+.icon{display:inline-block; vertical-align:middle; flex-shrink:0;}
 .nav-raised{
   width:46px; height:46px; border-radius:50%;
   background:linear-gradient(140deg, var(--primary) 0%, var(--skyblue) 130%);
