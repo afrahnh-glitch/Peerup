@@ -145,6 +145,9 @@ const state = {
   savedPosts: [],
   avatarModalOpen: false,
   avatarUploading: false,
+  allStudents: [],
+  viewedStudent: null,
+  viewedStats: null,
   history: [],           // in-app back stack once inside student/teacher screens
 };
 
@@ -634,6 +637,23 @@ async function openAchievements(){
   setState({loading:false});
   navigate('achievements', {myStats, leaderboard});
 }
+async function openStudentsList(){
+  setState({loading:true});
+  const allStudents = await fetchLeaderboard(db, 999).catch(() => []);
+  setState({loading:false});
+  navigate('studentsList', {allStudents});
+}
+async function openStudentProfile(uid){
+  setState({loading:true});
+  const [snap, stats] = await Promise.all([
+    getDoc(doc(db, 'users', uid)),
+    computeStudentPoints(db, uid).catch(() => null),
+  ]);
+  setState({loading:false});
+  if(!snap.exists()){ showToast('تعذّر إيجاد ملف هذي الطالبة.'); return; }
+  const profile = {uid, ...snap.data()};
+  navigate('studentProfile', {viewedStudent: profile, viewedStats: stats});
+}
 async function openQuestionsList(){
   let allQuestions = await fetchQuestionsWithAnswers(db).catch(() => []);
   allQuestions = await attachAvatarsToQuestions(allQuestions).catch(() => allQuestions);
@@ -936,8 +956,8 @@ function viewStudentHome(){
           <div class="hero-avatar">${avatarHtml(p, 36)}</div>
         </div>
       </div>
-      <h1>اهلّا بك، ${p.displayName || ''} 👋</h1>
-      <p class="sub">اكتشفي، شاركي، ارتقي</p>
+      <h1>صباح الخير، ${p.displayName || ''} 👋</h1>
+      <p class="sub">وش ودك تسوين اليوم؟</p>
       ${s ? `
       <div class="hero-stats">
         <div class="hero-stat"><span class="hs-ic">⭐</span><span class="hs-v">${s.points}</span><span class="hs-l">نقطة</span></div>
@@ -1294,14 +1314,23 @@ function viewAchievements(){
     </div>
     <div class="section-title stars-title-row"><img src="images/stars.svg" class="title-stars" alt="">🔥 نجوم PeerUp</div>
     <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
-      ${board.length ? board.map((st,i) => `
-        <div class="list-row" style="cursor:default;">
+      ${board.length ? board.map((st,i) => {
+        const isMe = st.uid === p.uid;
+        return `
+        <button class="list-row" ${isMe ? 'style="cursor:default;" disabled' : `data-action="view-student-profile" data-uid="${st.uid}"`}>
           <div style="width:22px; text-align:center; font-weight:700; color:var(--ink-faint); flex-shrink:0;">${i+1}</div>
           ${avatarHtml(st, 30)}
-          <div style="flex:1; font-weight:700; color:var(--ink);">${st.displayName}${st.uid===p.uid?' (أنتِ)':''}</div>
+          <div style="flex:1; font-weight:700; color:var(--ink);">${st.displayName}${isMe ? ' (أنتِ)' : ''}</div>
           <div style="color:var(--primary); font-weight:700; font-size:12.5px;">${st.points} نقطة</div>
-        </div>`).join('') : `<div class="empty-state">ولا طالبة سجّلت نقاط لسه.</div>`}
+          ${!isMe ? '<span class="chev">←</span>' : ''}
+        </button>`;
+      }).join('') : `<div class="empty-state">ولا طالبة سجّلت نقاط لسه.</div>`}
     </div>
+    <button class="role-card" data-action="nav-students-list" style="margin-top:4px;">
+      <div class="badge" style="background:var(--primary-soft); color:var(--primary);">${icon('trophy',20)}</div>
+      <div><div class="r-title">كل الطالبات</div><div class="r-sub">شوفي كل طالبة ونقاطها بالتفصيل</div></div>
+      <span class="chev">←</span>
+    </button>
     <button class="role-card" data-action="nav-saved-posts" style="margin-top:4px;">
       <div class="badge" style="background:var(--coral-soft); color:var(--coral);">${icon('bookmark',20)}</div>
       <div><div class="r-title">شروحات محفوظة</div><div class="r-sub">ارجعي للشروحات اللي احتفظتِ فيها</div></div>
@@ -1336,6 +1365,47 @@ function avatarModalHtml(){
         <input type="file" id="avatarUploadInput" accept="image/*" style="display:none;">
         <button type="button" class="pill-btn" data-action="use-default-avatar">استخدام الصورة الافتراضية</button>
       </div>`}
+    </div>
+  </div>`;
+}
+
+function viewStudentsList(){
+  const list = state.allStudents || [];
+  return `
+  <div class="content-app">
+    ${pageHead('الطالبات', `${list.length} طالبة مسجّلة`)}
+    ${list.length ? `
+    <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
+      ${list.map((st,i) => {
+        const isMe = st.uid === state.profile.uid;
+        return `
+        <button class="list-row" ${isMe ? 'style="cursor:default;" disabled' : `data-action="view-student-profile" data-uid="${st.uid}"`}>
+          <div style="width:20px; text-align:center; font-weight:700; color:var(--ink-faint); font-size:12px; flex-shrink:0;">${i+1}</div>
+          ${avatarHtml(st, 34)}
+          <div style="flex:1; font-weight:700; color:var(--ink); font-size:13.5px;">${st.displayName}${isMe ? ' (أنتِ)' : ''}</div>
+          <div style="color:var(--primary); font-weight:700; font-size:12px;">${st.points} نقطة</div>
+          ${!isMe ? '<span class="chev">←</span>' : ''}
+        </button>`;
+      }).join('')}
+    </div>` : `<div class="empty-state"><span class="emoji">👩🏻‍🎓</span>ما فيه طالبات مسجّلات بعد.</div>`}
+  </div>`;
+}
+
+function viewStudentProfile(){
+  const st = state.viewedStudent || {};
+  const s = state.viewedStats || {points:0, explanationsCount:0, answersCount:0, likesReceived:0, helpedCount:0};
+  return `
+  <div class="content-app">
+    ${pageHead(st.displayName || 'ملف طالبة')}
+    <div class="dash-header">
+      ${avatarHtml(st, 84)}
+      <h2 style="margin:10px 0 0;">${st.displayName || ''}</h2>
+      <div class="points-big">${s.points} PeerPoints</div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-tile"><div class="stat-num">${s.explanationsCount}</div><div class="stat-lbl">💡 شرح</div></div>
+      <div class="stat-tile"><div class="stat-num">${s.answersCount}</div><div class="stat-lbl">🆘 إجابة</div></div>
+      <div class="stat-tile"><div class="stat-num">${s.helpedCount}</div><div class="stat-lbl">🤝 ساعدت</div></div>
     </div>
   </div>`;
 }
@@ -1505,6 +1575,8 @@ function render(){
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
   if(state.view === 'achievements'){ app.innerHTML = viewAchievements() + studentNav(); return; }
   if(state.view === 'savedPosts'){ app.innerHTML = viewSavedPosts() + studentNav(); return; }
+  if(state.view === 'studentsList'){ app.innerHTML = viewStudentsList() + studentNav(); return; }
+  if(state.view === 'studentProfile'){ app.innerHTML = viewStudentProfile() + studentNav(); return; }
   if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
   if(state.view === 'teacherReview'){ app.innerHTML = viewTeacherReview() + teacherNav(); return; }
   if(state.view === 'teacherStats'){ app.innerHTML = viewTeacherStats() + teacherNav(); return; }
@@ -1641,6 +1713,10 @@ document.addEventListener('click', (e) => {
     openAchievements();
   } else if(action === 'nav-saved-posts'){
     openSavedPosts();
+  } else if(action === 'nav-students-list'){
+    openStudentsList();
+  } else if(action === 'view-student-profile'){
+    openStudentProfile(el.dataset.uid);
   } else if(action === 'like-post'){
     handleLikePost(el.dataset.id);
   } else if(action === 'toggle-bookmark'){
