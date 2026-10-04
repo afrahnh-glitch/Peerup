@@ -1391,6 +1391,19 @@ document.addEventListener('click', (e) => {
     setState({view:'landing', error:'', success:''});
   } else if(action === 'set-mode'){
     setState({mode: el.dataset.mode, error:'', success:''});
+  } else if(action === 'install-app'){
+    if(deferredInstallPrompt){
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.finally(() => {
+        deferredInstallPrompt = null;
+        const b = document.querySelector('.install-banner');
+        if(b) b.remove();
+      });
+    }
+  } else if(action === 'dismiss-install'){
+    try{ localStorage.setItem('peerup-install-dismissed', 'true'); }catch(_e){ /* تجاهل */ }
+    const b = document.querySelector('.install-banner');
+    if(b) b.remove();
   } else if(action === 'toggle-theme'){
     toggleTheme();
   } else if(action === 'logout'){
@@ -1542,4 +1555,58 @@ document.addEventListener('pointerdown', (e) => {
   });
 });
 
+/* ---------- حالة الاتصال: شريط هادئ يظهر فقط لما ينقطع الإنترنت، حتى
+   لا توهم الطالبة إن أي تغيير اتحفظ وهو فعليًا ما وصل لـFirebase. ---------- */
+function updateOfflineBanner(){
+  const existing = document.querySelector('.offline-banner');
+  if(navigator.onLine){
+    if(existing) existing.remove();
+    return;
+  }
+  if(existing) return;
+  const bar = document.createElement('div');
+  bar.className = 'offline-banner';
+  bar.textContent = 'لا يوجد اتصال بالإنترنت — أي تغيير الآن لن يُحفظ حتى يرجع الاتصال';
+  document.querySelector('.shell').appendChild(bar);
+}
+window.addEventListener('online', updateOfflineBanner);
+window.addEventListener('offline', updateOfflineBanner);
+
+/* ---------- تثبيت PWA: تنبيه بسيط مرة وحدة، غير مزعج ---------- */
+let deferredInstallPrompt = null;
+function isStandaloneApp(){
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+}
+function isIOSDevice(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
+function maybeShowInstallBanner(){
+  if(isStandaloneApp()) return;
+  if(document.querySelector('.install-banner')) return;
+  let dismissed = false;
+  try{ dismissed = localStorage.getItem('peerup-install-dismissed') === 'true'; }catch(_e){ /* تجاهل */ }
+  if(dismissed) return;
+  const canPrompt = !!deferredInstallPrompt;
+  const iosManual = !canPrompt && isIOSDevice();
+  if(!canPrompt && !iosManual) return;
+  const bar = document.createElement('div');
+  bar.className = 'install-banner';
+  bar.innerHTML = iosManual
+    ? '<span>ثبّتي PeerUp على جهازك لتجربة أسرع: اضغطي زر المشاركة بأسفل الشاشة ثم «إضافة إلى الشاشة الرئيسية»</span><button type="button" class="pill-btn" data-action="dismiss-install">حسنًا</button>'
+    : '<span>ثبّتي PeerUp على جهازك لتجربة أسرع</span><button type="button" class="pill-btn" data-action="install-app">تثبيت</button><button type="button" class="pill-btn" data-action="dismiss-install">إغلاق</button>';
+  document.querySelector('.shell').appendChild(bar);
+}
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  maybeShowInstallBanner();
+});
+window.addEventListener('appinstalled', () => {
+  const b = document.querySelector('.install-banner');
+  if(b) b.remove();
+  try{ localStorage.setItem('peerup-install-dismissed', 'true'); }catch(_e){ /* تجاهل */ }
+});
+
 render();
+updateOfflineBanner();
+setTimeout(maybeShowInstallBanner, 4000);
