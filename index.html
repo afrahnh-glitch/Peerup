@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>PeerUp — نرتقي معًا</title>
 <link rel="icon" href="images/logo.png" type="image/png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#5B3FD8">
+<!-- دعم إضافة PeerUp للشاشة الرئيسية بالآيفون/الآيباد كتطبيق مستقل -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PeerUp">
+<link rel="apple-touch-icon" href="images/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=El+Messiri:wght@500;600;700&display=swap" rel="stylesheet">
 <script>
@@ -54,5 +61,15 @@
   }, 7000);
 </script>
 <script type="module" src="auth.js"></script>
+<script>
+  // تسجيل Service Worker بعد اكتمال تحميل الصفحة حتى لا يؤخر ظهورها أول مرة.
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('./service-worker.js').catch(function(){
+        /* فشل التسجيل (مثلًا HTTP بدل HTTPS محليًا) — التطبيق يستمر يعمل عادي بدون PWA */
+      });
+    });
+  }
+</script>
 </body>
 </html>
