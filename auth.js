@@ -19,6 +19,7 @@ import {
   fetchChallenge, setChallenge, computeTeacherStats,
   attachBookmarkInfo, addBookmark, removeBookmark, fetchBookmarkedPosts,
   fetchAllApprovedPosts,
+  setAvatar, attachAvatarInfo, fetchAvatarsFor,
 } from "./content.js";
 import {
   MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc, mmNodesLabel,
@@ -58,6 +59,38 @@ function icon(name, size = 20){
   const d = ICONS[name];
   if(!d) return '';
   return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+}
+
+/* ==================================================================
+   نظام الصور الشخصية (Avatar): 6 شخصيات جاهزة مدمجة بالمشروع (SVG، بدون
+   أي خدمة خارجية)، أو رابط صورة مرفوعة من الجهاز، أو حرف افتراضي.
+   avatarHtml() هي نقطة الاستخدام الموحّدة بكل مكان يظهر فيه ملف طالبة.
+   ================================================================== */
+const AVATAR_IDS = ['avatar-01', 'avatar-02', 'avatar-03', 'avatar-04', 'avatar-05', 'avatar-06'];
+// profile-like: أي كائن فيه (avatarUrl أو avatarId) و(displayName أو studentName)
+function avatarHtml(obj, size = 44){
+  const name = obj.displayName || obj.studentName || '?';
+  const url = obj.avatarUrl || obj.authorAvatarUrl;
+  const aid = obj.avatarId || obj.authorAvatarId;
+  const style = `width:${size}px; height:${size}px; border-radius:50%; flex-shrink:0; object-fit:cover; display:block;`;
+  if(url) return `<img src="${url}" class="avatar-img" alt="" style="${style}">`;
+  if(aid && AVATAR_IDS.includes(aid)) return `<img src="images/avatars/${aid}.svg" class="avatar-img" alt="" style="${style}">`;
+  const fs = Math.round(size * 0.42);
+  return `<div class="avatar-fallback" style="${style} display:flex; align-items:center; justify-content:center; font-size:${fs}px;">${(name[0]||'?')}</div>`;
+}
+
+// الأسئلة فيها طبقتين (السؤال + إجاباته المتداخلة)، فنجمع كل المعرّفات
+// من الطبقتين سوا ونطلبها بدُفعة واحدة بدل استدعاء منفصل لكل طبقة.
+async function attachAvatarsToQuestions(questions){
+  if(!questions.length) return questions;
+  const allUids = [];
+  questions.forEach(q => { allUids.push(q.studentUid); (q.answers||[]).forEach(a => allUids.push(a.studentUid)); });
+  const map = await fetchAvatarsFor(db, allUids).catch(() => ({}));
+  const pick = (uid) => ({authorAvatarId: (map[uid]||{}).avatarId || null, authorAvatarUrl: (map[uid]||{}).avatarUrl || null});
+  return questions.map(q => ({
+    ...q, ...pick(q.studentUid),
+    answers: (q.answers || []).map(a => ({...a, ...pick(a.studentUid)})),
+  }));
 }
 
 const POST_TYPES = {
@@ -110,6 +143,8 @@ const state = {
   teacherStats: null,
   leaderboard: [],
   savedPosts: [],
+  avatarModalOpen: false,
+  avatarUploading: false,
   history: [],           // in-app back stack once inside student/teacher screens
 };
 
@@ -164,6 +199,41 @@ function discardPhoto(){
   if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
   photoBlob = null; photoPreviewUrl = null;
   renderAttachArea();
+}
+
+/* ---------- حفظ اختيار الصورة الشخصية (Avatar جاهز أو افتراضي) ---------- */
+async function handleSetAvatar({avatarId, avatarUrl}){
+  try{
+    await setAvatar(db, state.profile.uid, {avatarId, avatarUrl});
+    setState({
+      profile: {...state.profile, avatarId, avatarUrl},
+      avatarModalOpen: false,
+    });
+    showToast('✨ تم تحديث صورتك الشخصية');
+  }catch(err){
+    showToast('صار خطأ أثناء الحفظ، حاولي مرة أخرى.');
+  }
+}
+/* ---------- رفع صورة شخصية من الجهاز (نفس أسلوب ضغط صور الشروحات) ---------- */
+async function handleAvatarUpload(file){
+  if(!file || !file.type.startsWith('image/')){ showToast('اختاري ملف صورة فقط.'); return; }
+  setState({avatarUploading: true});
+  try{
+    const blob = await compressImage(file, 480, 0.85);
+    const path = `avatars/${state.profile.uid}/${Date.now()}.jpg`;
+    const fileRef = ref(storage, path);
+    await uploadBytes(fileRef, blob, {contentType: 'image/jpeg'});
+    const url = await getDownloadURL(fileRef);
+    await setAvatar(db, state.profile.uid, {avatarId: null, avatarUrl: url});
+    setState({
+      profile: {...state.profile, avatarId: null, avatarUrl: url},
+      avatarModalOpen: false, avatarUploading: false,
+    });
+    showToast('✨ تم تحديث صورتك الشخصية');
+  }catch(err){
+    setState({avatarUploading: false});
+    showToast('تعذّر رفع الصورة. تأكدي من تفعيل Storage بمشروعك، أو جربي صورة أصغر.');
+  }
 }
 let challengeMode = null; // null | 'text' | 'voice' | 'map' — طريقة الرد على تحدي اليوم
 
@@ -505,7 +575,9 @@ async function openLesson(lessonId){
   ]);
   let posts = await attachLikeInfo(db, rawPosts, state.profile.uid).catch(() => rawPosts);
   posts = await attachBookmarkInfo(db, posts, state.profile.uid).catch(() => posts);
-  navigate('lessonDetail', {currentLesson: lesson, posts, questions});
+  posts = await attachAvatarInfo(db, posts).catch(() => posts);
+  const questionsWithAvatars = await attachAvatarsToQuestions(questions).catch(() => questions);
+  navigate('lessonDetail', {currentLesson: lesson, posts, questions: questionsWithAvatars});
 }
 async function handleLikePost(postId){
   try{
@@ -544,7 +616,8 @@ async function handleToggleBookmark(postId){
 }
 async function openSavedPosts(){
   setState({loading:true});
-  const savedPosts = await fetchBookmarkedPosts(db, state.profile.uid).catch(() => []);
+  let savedPosts = await fetchBookmarkedPosts(db, state.profile.uid).catch(() => []);
+  savedPosts = await attachAvatarInfo(db, savedPosts).catch(() => savedPosts);
   setState({loading:false});
   navigate('savedPosts', {savedPosts});
 }
@@ -562,7 +635,8 @@ async function openAchievements(){
   navigate('achievements', {myStats, leaderboard});
 }
 async function openQuestionsList(){
-  const allQuestions = await fetchQuestionsWithAnswers(db).catch(() => []);
+  let allQuestions = await fetchQuestionsWithAnswers(db).catch(() => []);
+  allQuestions = await attachAvatarsToQuestions(allQuestions).catch(() => allQuestions);
   navigate('questionsList', {allQuestions});
 }
 function lessonTitleById(id){
@@ -646,7 +720,9 @@ async function handleSubmitAnswer(questionId, text){
       questionId, studentUid: state.profile.uid, studentName: state.profile.displayName, text,
     });
     showToast('تم إرسال إجابتك ✨');
-    const freshAnswers = await fetchAnswersForQuestion(db, questionId).catch(() => []);
+    let freshAnswers = await fetchAnswersForQuestion(db, questionId).catch(() => []);
+    const avMap = await fetchAvatarsFor(db, freshAnswers.map(a => a.studentUid)).catch(() => ({}));
+    freshAnswers = freshAnswers.map(a => ({...a, authorAvatarId: (avMap[a.studentUid]||{}).avatarId || null, authorAvatarUrl: (avMap[a.studentUid]||{}).avatarUrl || null}));
     const updateList = (list) => (list || []).map(q => q.id === questionId ? {...q, answers: freshAnswers} : q);
     setState({
       questions: updateList(state.questions),
@@ -700,7 +776,8 @@ async function openTeacherStats(){
   navigate('teacherStats', {teacherStats});
 }
 async function openTeacherReview(){
-  const pendingPosts = await fetchPendingPosts(db).catch(() => []);
+  let pendingPosts = await fetchPendingPosts(db).catch(() => []);
+  pendingPosts = await attachAvatarInfo(db, pendingPosts).catch(() => pendingPosts);
   navigate('teacherReview', {pendingPosts});
 }
 async function handleApprovePost(id){
@@ -856,7 +933,7 @@ function viewStudentHome(){
         <div class="brand-mini"><img src="images/logo-white.png" class="bm-mark" alt="PeerUp"><div class="bm-name">PeerUp</div></div>
         <div class="hero-end">
           <button class="theme-toggle" data-action="toggle-theme" aria-label="تبديل الوضع الداكن">${icon(effectiveTheme()==='dark'?'sun':'moon',17)}</button>
-          <div class="hero-avatar">👩‍🚀</div>
+          <div class="hero-avatar">${avatarHtml(p, 36)}</div>
         </div>
       </div>
       <h1>صباح الخير، ${p.displayName || ''} 👋</h1>
@@ -969,6 +1046,7 @@ async function renderSearchResults(term){
     || lessonTitleById(p.lessonId).toLowerCase().includes(needle));
   matches = await attachLikeInfo(db, matches, state.profile.uid).catch(() => matches);
   matches = await attachBookmarkInfo(db, matches, state.profile.uid).catch(() => matches);
+  matches = await attachAvatarInfo(db, matches).catch(() => matches);
   if(document.getElementById('lessonSearchInput') && document.getElementById('lessonSearchInput').value.trim() !== q) return; // تغيّر البحث أثناء الانتظار
   results.innerHTML = matches.length
     ? `<div class="section-title">${icon('search',15)} ${matches.length} نتيجة</div>` + matches.map(p => postCard({...p, _searchResult:true})).join('')
@@ -982,7 +1060,7 @@ function postCard(p){
   return `
   <div class="post-card">
     <div class="p-head">
-      <div class="badge sm" style="background:var(--primary-soft)">${t ? t.emoji : '💡'}</div>
+      ${avatarHtml(p, 38)}
       <div style="flex:1;">
         <div class="p-who">${p.studentName}${isMine ? ' (أنتِ)' : ''}</div>
         ${(state.view==='savedPosts' || p._searchResult) ? `<div class="p-meta">${lessonTitleById(p.lessonId)}</div>` : (t ? `<div class="p-meta">${t.label}</div>` : '')}
@@ -1012,12 +1090,12 @@ function questionCard(q){
   return `
   <div class="post-card">
     <div style="font-weight:700; color:var(--ink); margin-bottom:6px; font-size:14px;">${q.text}</div>
-    <div class="p-meta" style="margin-bottom:8px;">سألتها ${q.studentName}${showLessonTag ? ' · ' + lessonTitleById(q.lessonId) : ''}</div>
+    <div class="p-meta q-asker" style="margin-bottom:8px;">${avatarHtml(q,20)} سألتها ${q.studentName}${showLessonTag ? ' · ' + lessonTitleById(q.lessonId) : ''}</div>
     <button class="link-btn" style="margin:0; text-align:right;" data-action="toggle-question" data-id="${q.id}">
       ${q.answers.length ? `💬 ${q.answers.length} إجابة${q.answers.length>1?'ات':''} — ${expanded?'إخفاء':'عرض'}` : (expanded ? 'إخفاء نموذج الإجابة' : '✍️ كوني أول من تجاوب')}
     </button>
     ${expanded ? `
-      ${q.answers.map(a => `<div class="answer-line"><b>${a.studentName}:</b> ${a.text}</div>`).join('')}
+      ${q.answers.map(a => `<div class="answer-line">${avatarHtml(a,18)} <b>${a.studentName}:</b> ${a.text}</div>`).join('')}
       <form class="answer-form" data-answer-for="${q.id}">
         <input type="text" placeholder="اكتبي إجابتك..." required>
         <button type="submit">إرسال</button>
@@ -1201,8 +1279,12 @@ function viewAchievements(){
   return `
   <div class="content-app">
     <div class="dash-header">
-      <div class="dash-avatar">${(p.displayName||'?')[0]}</div>
-      <h2 style="margin:0;">${p.displayName || ''}</h2>
+      <div class="profile-avatar-wrap">
+        ${avatarHtml(p, 84)}
+        <button class="avatar-edit-btn" data-action="open-avatar-picker" aria-label="تغيير الصورة">${icon('camera',14)}</button>
+      </div>
+      <h2 style="margin:10px 0 0;">${p.displayName || ''}</h2>
+      <button class="link-btn" style="margin:2px 0 0;" data-action="open-avatar-picker">تغيير الصورة</button>
       <div class="points-big">${s.points} PeerPoints</div>
     </div>
     <div style="display:flex; gap:10px; margin:16px 0 22px;">
@@ -1215,6 +1297,7 @@ function viewAchievements(){
       ${board.length ? board.map((st,i) => `
         <div class="list-row" style="cursor:default;">
           <div style="width:22px; text-align:center; font-weight:700; color:var(--ink-faint); flex-shrink:0;">${i+1}</div>
+          ${avatarHtml(st, 30)}
           <div style="flex:1; font-weight:700; color:var(--ink);">${st.displayName}${st.uid===p.uid?' (أنتِ)':''}</div>
           <div style="color:var(--primary); font-weight:700; font-size:12.5px;">${st.points} نقطة</div>
         </div>`).join('') : `<div class="empty-state">ولا طالبة سجّلت نقاط لسه.</div>`}
@@ -1225,6 +1308,35 @@ function viewAchievements(){
       <span class="chev">←</span>
     </button>
     <button class="link-btn" data-action="logout">تسجيل الخروج</button>
+  </div>
+  ${state.avatarModalOpen ? avatarModalHtml() : ''}`;
+}
+
+function avatarModalHtml(){
+  const p = state.profile || {};
+  const current = p.avatarUrl ? 'custom' : (p.avatarId || null);
+  return `
+  <div class="avatar-modal-backdrop" data-action="close-avatar-picker">
+    <div class="avatar-modal" data-action="noop">
+      <div class="avatar-modal-head">
+        <h3>اختاري شخصيتك في PeerUp</h3>
+        <button class="avatar-modal-close" data-action="close-avatar-picker">${icon('close',16)}</button>
+      </div>
+      ${state.avatarUploading ? `
+      <div class="empty-state" style="margin:10px 0;">جارِ رفع الصورة...</div>` : `
+      <div class="avatar-grid">
+        ${AVATAR_IDS.map(id => `
+          <button class="avatar-opt ${current===id?'selected':''}" data-action="pick-avatar" data-id="${id}">
+            <img src="images/avatars/${id}.svg" alt="">
+            ${current===id ? `<span class="avatar-check">${icon('check',12)}</span>` : ''}
+          </button>`).join('')}
+      </div>
+      <div class="avatar-modal-actions">
+        <label class="pill-btn" for="avatarUploadInput">${icon('camera',15)} رفع صورة من الجهاز</label>
+        <input type="file" id="avatarUploadInput" accept="image/*" style="display:none;">
+        <button type="button" class="pill-btn" data-action="use-default-avatar">استخدام الصورة الافتراضية</button>
+      </div>`}
+    </div>
   </div>`;
 }
 
@@ -1298,7 +1410,7 @@ function pendingPostCard(p){
   return `
   <div class="post-card">
     <div class="p-head">
-      <div class="badge sm" style="background:var(--primary-soft)">${t ? t.emoji : '💡'}</div>
+      ${avatarHtml(p, 38)}
       <div style="flex:1;">
         <div class="p-who">${p.studentName}</div>
         <div class="p-meta">${t ? t.label + ' · ' : ''}${lessonTitleById(p.lessonId)}</div>
@@ -1408,6 +1520,9 @@ document.addEventListener('change', (e) => {
   if(e.target.id === 'photoInput' && e.target.files && e.target.files[0]){
     handlePhotoSelect(e.target.files[0]);
   }
+  if(e.target.id === 'avatarUploadInput' && e.target.files && e.target.files[0]){
+    handleAvatarUpload(e.target.files[0]);
+  }
 });
 
 document.addEventListener('input', (e) => {
@@ -1441,6 +1556,16 @@ document.addEventListener('click', (e) => {
     try{ localStorage.setItem('peerup-install-dismissed', 'true'); }catch(_e){ /* تجاهل */ }
     const b = document.querySelector('.install-banner');
     if(b) b.remove();
+  } else if(action === 'noop'){
+    /* امتصاص الضغطة داخل بطاقة المودال حتى لا تغلقه (مثل الضغط على العنوان) */
+  } else if(action === 'open-avatar-picker'){
+    setState({avatarModalOpen: true});
+  } else if(action === 'close-avatar-picker'){
+    setState({avatarModalOpen: false});
+  } else if(action === 'pick-avatar'){
+    handleSetAvatar({avatarId: el.dataset.id, avatarUrl: null});
+  } else if(action === 'use-default-avatar'){
+    handleSetAvatar({avatarId: null, avatarUrl: null});
   } else if(action === 'toggle-theme'){
     toggleTheme();
   } else if(action === 'logout'){
