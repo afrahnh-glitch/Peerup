@@ -24,6 +24,42 @@ import {
   MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc, mmNodesLabel,
 } from "./mindmap.js";
 
+/* ==================================================================
+   نظام أيقونات موحّد: SVG بسيط بنفس سماكة الخط لكل أيقونات الواجهة
+   (التنقل، الأزرار، الشارات)، بدل الإيموجي المتفرّقة. تستخدم currentColor
+   فتتبع لون النص تلقائيًا بالوضعين الفاتح والداكن بدون أي نسخة إضافية.
+   الإيموجي التعبيرية (التوست، الاحتفالات، الحالات الفارغة) بقيت كما هي —
+   هذي صوت المنصة، مو عناصر واجهة تحتاج توحيد.
+   ================================================================== */
+const ICONS = {
+  home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/>',
+  book: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5V5.5Z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.3 9.2a2.7 2.7 0 1 1 3.9 2.4c-.9.5-1.2 1-1.2 2"/><circle cx="12" cy="16.9" r=".2" fill="currentColor"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0V4Z"/><path d="M8 5H5.3a2 2 0 0 0 0 4H7"/><path d="M16 5h2.7a2 2 0 0 1 0 4H17"/><path d="M12 13v3"/><path d="M9 20h6"/><path d="M10 16.5h4v2a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-2Z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  lightbulb: '<path d="M9.5 18h5"/><path d="M10.3 21h3.4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2.2h5.2c0-1 .4-1.7 1-2.2A6 6 0 0 0 12 3Z"/>',
+  camera: '<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1-2h7l1 2h2A1.5 1.5 0 0 1 20 8.5v10A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5v-10Z"/><circle cx="12" cy="13" r="3.4"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/><path d="M9 21h6"/>',
+  map: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="8.3" r="1.9"/><circle cx="7.6" cy="15" r="1.9"/><circle cx="16.4" cy="15" r="1.9"/><path d="M12 10.2 8.4 13.4M12 10.2l3.6 3.2"/>',
+  check: '<path d="M4 12.5 9.5 18 20 6.5"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  trash: '<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6.5 7l1 13a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1l1-13"/>',
+  bookmark: '<path d="M6.5 4h11a1 1 0 0 1 1 1v15l-6.5-4-6.5 4V5a1 1 0 0 1 1-1Z"/>',
+  search: '<circle cx="11" cy="11" r="6.3"/><path d="M20 20l-4.3-4.3"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.3M12 19.2v2.3M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M2.5 12h2.3M19.2 12h2.3M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"/>',
+  moon: '<path d="M20 14.3A8.4 8.4 0 1 1 9.7 4a6.9 6.9 0 0 0 10.3 10.3Z"/>',
+  stats: '<path d="M5 20V10M12 20V4M19 20v-7"/>',
+  inbox: '<path d="M4 13 6.2 5.6A1 1 0 0 1 7.2 5h9.6a1 1 0 0 1 1 .6L20 13"/><path d="M4 13h4.8l1 2.4h4.4l1-2.4H20v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-5Z"/>',
+  refresh: '<path d="M4 11a8 8 0 0 1 14-5.2M20 13a8 8 0 0 1-14 5.2"/><path d="M18 3v4.5h-4.5M6 21v-4.5h4.5"/>',
+  edit: '<path d="M4 20h4.2L19 9.2a2 2 0 0 0 0-2.8l-1.4-1.4a2 2 0 0 0-2.8 0L4 15.8V20Z"/><path d="M13.5 6.5l4 4"/>',
+  save: '<path d="M5 4h11l3 3v13H5V4Z"/><path d="M8 4v5h7V4"/><path d="M8 14h8v6H8v-6Z"/>',
+};
+function icon(name, size = 20){
+  const d = ICONS[name];
+  if(!d) return '';
+  return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+}
+
 const POST_TYPES = {
   quick:   {emoji: '📝', label: 'شرح سريع'},
   image:   {emoji: '🖼️', label: 'صورة / خريطة مفاهيم'},
@@ -163,12 +199,12 @@ function renderVoiceArea(){
     box.innerHTML = `
       <audio controls src="${voiceNote.dataUrl}" style="width:100%;"></audio>
       <div class="voice-actions">
-        <button type="button" class="pill-btn" data-action="redo-voice">🔁 إعادة التسجيل</button>
-        <button type="button" class="pill-btn" data-action="discard-voice">🗑️ حذف</button>
+        <button type="button" class="pill-btn" data-action="redo-voice">${icon('refresh',16)} إعادة التسجيل</button>
+        <button type="button" class="pill-btn" data-action="discard-voice">${icon('trash',16)} حذف</button>
       </div>`;
   } else {
     box.innerHTML = `
-      <button type="button" class="btn btn-primary" data-action="start-voice">🎙️ ابدئي التسجيل</button>
+      <button type="button" class="btn btn-primary" data-action="start-voice">${icon('mic',17)} ابدئي التسجيل</button>
       <div class="hint" style="text-align:center; margin-top:6px;">٢٠ ثانية كحد أقصى</div>`;
   }
 }
@@ -229,9 +265,9 @@ function renderAttachArea(){
   if(!box) return;
   box.innerHTML = `
     <div class="attach-toggle three">
-      <button type="button" class="attach-opt ${attachMode==='photo'?'selected':''}" data-action="pick-attach" data-mode="photo">📷 صورة</button>
-      <button type="button" class="attach-opt ${attachMode==='voice'?'selected':''}" data-action="pick-attach" data-mode="voice">🎙️ صوت</button>
-      <button type="button" class="attach-opt ${attachMode==='map'?'selected':''}" data-action="pick-attach" data-mode="map">🧠 خريطة</button>
+      <button type="button" class="attach-opt ${attachMode==='photo'?'selected':''}" data-action="pick-attach" data-mode="photo">${icon('camera',17)} صورة</button>
+      <button type="button" class="attach-opt ${attachMode==='voice'?'selected':''}" data-action="pick-attach" data-mode="voice">${icon('mic',17)} صوت</button>
+      <button type="button" class="attach-opt ${attachMode==='map'?'selected':''}" data-action="pick-attach" data-mode="map">${icon('map',17)} خريطة</button>
     </div>
     ${attachMode==='photo' ? '<div id="photoArea" class="attach-body"></div>' : ''}
     ${attachMode==='voice' ? '<div id="voiceArea" class="attach-body"></div>' : ''}
@@ -247,13 +283,13 @@ function renderPhotoArea(){
     box.innerHTML = `
       <img src="${photoPreviewUrl}" class="photo-preview" alt="معاينة الصورة">
       <div class="voice-actions">
-        <label class="pill-btn" for="photoInput">🔁 استبدال الصورة</label>
-        <button type="button" class="pill-btn" data-action="discard-photo">🗑️ حذف</button>
+        <label class="pill-btn" for="photoInput">${icon('refresh',16)} استبدال الصورة</label>
+        <button type="button" class="pill-btn" data-action="discard-photo">${icon('trash',16)} حذف</button>
       </div>
       <input type="file" id="photoInput" accept="image/*" style="display:none;">`;
   } else {
     box.innerHTML = `
-      <label class="btn btn-primary" for="photoInput" style="display:flex; cursor:pointer;">📷 اختاري أو صوّري صورة</label>
+      <label class="btn btn-primary" for="photoInput" style="display:flex; cursor:pointer;">${icon('camera',17)} اختاري أو صوّري صورة</label>
       <div class="hint" style="text-align:center; margin-top:6px;">تُضغط تلقائيًا قبل الرفع</div>
       <input type="file" id="photoInput" accept="image/*" style="display:none;">`;
   }
@@ -271,11 +307,11 @@ function renderMapPreview(){
     box.innerHTML = `
       <div class="mm-preview-card" data-action="open-mindmap">
         ${mmThumbSvg(data)}
-        <div class="mm-preview-cap">🧠 ${mmNodesLabel(data.nodes.length)} — اضغطي للتعديل</div>
+        <div class="mm-preview-cap">${icon('map',15)} ${mmNodesLabel(data.nodes.length)} — اضغطي للتعديل</div>
       </div>
       <div class="mm-preview-actions">
-        <button type="button" class="btn btn-primary" data-action="open-mindmap">✏️ تعديل الخريطة</button>
-        <button type="button" class="pill-btn" data-action="clear-mindmap">🗑️ مسح الخريطة</button>
+        <button type="button" class="btn btn-primary" data-action="open-mindmap">${icon('edit',17)} تعديل الخريطة</button>
+        <button type="button" class="pill-btn" data-action="clear-mindmap">${icon('trash',16)} مسح الخريطة</button>
       </div>`;
   } else {
     box.innerHTML = `
@@ -283,7 +319,7 @@ function renderMapPreview(){
         <div class="mm-empty-planet">🪐</div>
         <div>ابني خريطة للدرس: فكرة رئيسية في المنتصف، فروع، وفروع فرعية مرتبطة بها.</div>
       </div>
-      <button type="button" class="btn btn-primary" data-action="open-mindmap">🧠 افتحي محرر الخريطة</button>`;
+      <button type="button" class="btn btn-primary" data-action="open-mindmap">${icon('map',17)} افتحي محرر الخريطة</button>`;
   }
 }
 function openMapEditor(){
@@ -319,7 +355,7 @@ function mindMapBlock(p){
       return `
       <div class="mm-preview-card" data-action="view-mindmap" data-id="${p.id}">
         ${svg}
-        <div class="mm-preview-cap">🔍 خريطة ذهنية · ${mmNodesLabel(Math.min(mm.nodes.length, 40))} — اضغطي للعرض الكامل</div>
+        <div class="mm-preview-cap">${icon('map',15)} خريطة ذهنية · ${mmNodesLabel(Math.min(mm.nodes.length, 40))} — اضغطي للعرض الكامل</div>
       </div>`;
     }
   }
@@ -728,21 +764,21 @@ function studentNav(){
   const active = v => state.view === v ? 'active' : '';
   return `
   <div class="bottomnav">
-    <button class="navitem ${active('studentHome')}" data-action="nav-student-home"><span class="ic-wrap">🏠</span>الرئيسية</button>
-    <button class="navitem ${active('subjectLessons')||active('lessonDetail')}" data-action="nav-lessons"><span class="ic-wrap">📚</span>الدروس</button>
-    <button class="navitem" data-action="nav-share"><span class="nav-raised">💡</span>إضافة</button>
-    <button class="navitem ${active('questionsList')}" data-action="nav-questions-list"><span class="ic-wrap">🆘</span>الأسئلة</button>
-    <button class="navitem ${active('achievements')}" data-action="nav-achievements"><span class="ic-wrap">🏆</span>إنجازي</button>
+    <button class="navitem ${active('studentHome')}" data-action="nav-student-home"><span class="ic-wrap">${icon('home')}</span>الرئيسية</button>
+    <button class="navitem ${active('subjectLessons')||active('lessonDetail')}" data-action="nav-lessons"><span class="ic-wrap">${icon('book')}</span>الدروس</button>
+    <button class="navitem" data-action="nav-share"><span class="nav-raised">${icon('plus', 22)}</span>إضافة</button>
+    <button class="navitem ${active('questionsList')}" data-action="nav-questions-list"><span class="ic-wrap">${icon('help')}</span>الأسئلة</button>
+    <button class="navitem ${active('achievements')}" data-action="nav-achievements"><span class="ic-wrap">${icon('trophy')}</span>إنجازي</button>
   </div>`;
 }
 function teacherNav(){
   const active = v => state.view === v ? 'active' : '';
   return `
   <div class="bottomnav">
-    <button class="navitem ${active('teacherHome')}" data-action="nav-teacher-home"><span class="ic-wrap">🏠</span>الرئيسية</button>
-    <button class="navitem ${active('teacherReview')}" data-action="nav-teacher-review"><span class="ic-wrap">📥</span>المراجعة</button>
-    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">❓</span>الأسئلة</button>
-    <button class="navitem ${active('teacherStats')}" data-action="nav-teacher-stats"><span class="ic-wrap">📊</span>الإحصائيات</button>
+    <button class="navitem ${active('teacherHome')}" data-action="nav-teacher-home"><span class="ic-wrap">${icon('home')}</span>الرئيسية</button>
+    <button class="navitem ${active('teacherReview')}" data-action="nav-teacher-review"><span class="ic-wrap">${icon('inbox')}</span>المراجعة</button>
+    <button class="navitem" data-action="coming-soon"><span class="ic-wrap">${icon('help')}</span>الأسئلة</button>
+    <button class="navitem ${active('teacherStats')}" data-action="nav-teacher-stats"><span class="ic-wrap">${icon('stats')}</span>الإحصائيات</button>
   </div>`;
 }
 
@@ -819,7 +855,7 @@ function viewStudentHome(){
       <div class="hero-top">
         <div class="brand-mini"><img src="images/logo-white.png" class="bm-mark" alt="PeerUp"><div class="bm-name">PeerUp</div></div>
         <div class="hero-end">
-          <button class="theme-toggle" data-action="toggle-theme" aria-label="تبديل الوضع الداكن">${effectiveTheme()==='dark'?'☀️':'🌙'}</button>
+          <button class="theme-toggle" data-action="toggle-theme" aria-label="تبديل الوضع الداكن">${icon(effectiveTheme()==='dark'?'sun':'moon',17)}</button>
           <div class="hero-avatar">👩‍🚀</div>
         </div>
       </div>
@@ -835,16 +871,16 @@ function viewStudentHome(){
     <div style="padding:0 18px;">
       <div class="qa-grid">
         <button class="qa-card" data-action="nav-share">
-          <div class="qa-badge" style="background:var(--primary-soft)"><img src="images/lightbulb.svg" class="badge-icon" alt=""></div>
+          <div class="qa-badge" style="background:var(--primary-soft); color:var(--primary);">${icon('lightbulb', 22)}</div>
           <div class="qa-title">فهمتها<br>بطريقتي</div>
         </button>
         <button class="qa-card" data-action="nav-ask">
-          <div class="qa-badge" style="background:var(--coral-soft)">🆘</div>
+          <div class="qa-badge" style="background:var(--coral-soft); color:var(--coral);">${icon('help', 22)}</div>
           <div class="qa-title">أنقذوني<br>أحتاج مساعدة</div>
         </button>
       </div>
       <button class="qa-card qa-wide" data-action="nav-lessons">
-        <div class="qa-badge" style="background:var(--skyblue-soft)"><img src="images/book.svg" class="badge-icon" alt=""></div>
+        <div class="qa-badge" style="background:var(--skyblue-soft); color:var(--on-skyblue-soft);">${icon('book', 22)}</div>
         <div class="qa-title">أبي أفهم<div class="qa-sub">شوفي دروس ${subj ? subj.name : 'المادة'}</div></div>
         <span class="chev">←</span>
       </button>
@@ -882,8 +918,9 @@ function viewSubjectLessons(){
   return `
   <div class="content-app">
     ${pageHead('تعلّمي من زميلاتك', 'اختاري الدرس اللي تبين تشوفينه')}
-    <div class="field" style="margin-bottom:16px;">
-      <input type="search" id="lessonSearchInput" placeholder="🔍 ابحثي باسم الدرس أو عنوان الشرح أو نصه..." autocomplete="off">
+    <div class="field search-wrap" style="margin-bottom:16px;">
+      ${icon('search', 16)}
+      <input type="search" id="lessonSearchInput" placeholder="ابحثي باسم الدرس أو عنوان الشرح أو نصه..." autocomplete="off">
     </div>
     <div id="searchResultsArea"></div>
     <div id="lessonListArea">
@@ -934,8 +971,8 @@ async function renderSearchResults(term){
   matches = await attachBookmarkInfo(db, matches, state.profile.uid).catch(() => matches);
   if(document.getElementById('lessonSearchInput') && document.getElementById('lessonSearchInput').value.trim() !== q) return; // تغيّر البحث أثناء الانتظار
   results.innerHTML = matches.length
-    ? `<div class="section-title">🔍 ${matches.length} نتيجة</div>` + matches.map(p => postCard({...p, _searchResult:true})).join('')
-    : `<div class="empty-state"><span class="emoji">🔍</span>ما فيه نتائج لـ«${q}».</div>`;
+    ? `<div class="section-title">${icon('search',15)} ${matches.length} نتيجة</div>` + matches.map(p => postCard({...p, _searchResult:true})).join('')
+    : `<div class="empty-state"><span class="emoji">${icon('search',28)}</span>ما فيه نتائج لـ«${q}».</div>`;
 }
 
 function postCard(p){
@@ -963,7 +1000,7 @@ function postCard(p){
         💡 أفادني <span>${p.likesCount||0}</span>
       </button>
       <button class="pill-btn ${p.bookmarked?'saved':''}" data-action="toggle-bookmark" data-id="${p.id}">
-        ${p.bookmarked ? '🔖 محفوظ' : '🔖 احتفظي فيها'}
+        ${icon('bookmark',14)} ${p.bookmarked ? 'محفوظ' : 'احتفظي فيها'}
       </button>
     </div>` : ''}
   </div>`;
@@ -998,12 +1035,12 @@ function viewLessonDetail(){
     <div class="section-title">💡 شروحات الطالبات</div>
     ${posts.length ? posts.map(postCard).join('') : `
       <div class="empty-state"><span class="emoji">💭</span>لسه ما فيه شروحات لهالدرس. كوني أول من تشارك فهمها!</div>`}
-    <button class="btn btn-primary" style="margin-top:4px;" data-action="nav-share" data-lesson="${l?l.id:''}">💡 شاركي فهمك بهالدرس</button>
+    <button class="btn btn-primary" style="margin-top:4px;" data-action="nav-share" data-lesson="${l?l.id:''}">${icon('lightbulb',17)} شاركي فهمك بهالدرس</button>
 
     <div class="section-title">🆘 الأسئلة المتعلقة بالدرس</div>
     ${questions.length ? questions.map(questionCard).join('') : `
       <div class="empty-state"><span class="emoji">🆘</span>ولا سؤال لهالدرس بعد.</div>`}
-    <button class="btn btn-coral" style="margin-top:4px;" data-action="nav-ask" data-lesson="${l?l.id:''}">🆘 اسألي عن هالدرس</button>
+    <button class="btn btn-coral" style="margin-top:4px;" data-action="nav-ask" data-lesson="${l?l.id:''}">${icon('help',17)} اسألي عن هالدرس</button>
   </div>`;
 }
 
@@ -1073,9 +1110,9 @@ function renderChallengeAttach(){
   if(!box) return;
   box.innerHTML = `
     <div class="attach-toggle three">
-      <button type="button" class="attach-opt ${challengeMode==='text'?'selected':''}" data-action="pick-challenge-mode" data-mode="text">📝 نص</button>
-      <button type="button" class="attach-opt ${challengeMode==='voice'?'selected':''}" data-action="pick-challenge-mode" data-mode="voice">🎙️ صوت</button>
-      <button type="button" class="attach-opt ${challengeMode==='map'?'selected':''}" data-action="pick-challenge-mode" data-mode="map">🧠 خريطة</button>
+      <button type="button" class="attach-opt ${challengeMode==='text'?'selected':''}" data-action="pick-challenge-mode" data-mode="text">${icon('edit',17)} نص</button>
+      <button type="button" class="attach-opt ${challengeMode==='voice'?'selected':''}" data-action="pick-challenge-mode" data-mode="voice">${icon('mic',17)} صوت</button>
+      <button type="button" class="attach-opt ${challengeMode==='map'?'selected':''}" data-action="pick-challenge-mode" data-mode="map">${icon('map',17)} خريطة</button>
     </div>
     ${challengeMode==='text' ? '<textarea id="challengeText" class="challenge-textarea" placeholder="اكتبي إجابتك هنا..."></textarea>' : ''}
     ${challengeMode==='voice' ? '<div id="voiceArea" class="attach-body"></div>' : ''}
@@ -1183,7 +1220,7 @@ function viewAchievements(){
         </div>`).join('') : `<div class="empty-state">ولا طالبة سجّلت نقاط لسه.</div>`}
     </div>
     <button class="role-card" data-action="nav-saved-posts" style="margin-top:4px;">
-      <div class="badge" style="background:var(--coral-soft)">🔖</div>
+      <div class="badge" style="background:var(--coral-soft); color:var(--coral);">${icon('bookmark',20)}</div>
       <div><div class="r-title">شروحات محفوظة</div><div class="r-sub">ارجعي للشروحات اللي احتفظتِ فيها</div></div>
       <span class="chev">←</span>
     </button>
@@ -1210,20 +1247,20 @@ function viewTeacherHome(){
   return `
   <div class="content-app">
     <div class="dash-header">
-      <button class="theme-toggle theme-toggle-abs" data-action="toggle-theme" aria-label="تبديل الوضع الداكن">${effectiveTheme()==='dark'?'☀️':'🌙'}</button>
+      <button class="theme-toggle theme-toggle-abs" data-action="toggle-theme" aria-label="تبديل الوضع الداكن">${icon(effectiveTheme()==='dark'?'sun':'moon',17)}</button>
       <div class="dash-avatar">${(p.displayName||'?')[0]}</div>
       <h2 style="margin:0;">${p.displayName || ''}</h2>
       <span class="role-chip teacher">👩🏻‍🏫 معلمة</span>
     </div>
     <button class="role-card" data-action="nav-teacher-review" style="margin-top:4px;">
-      <div class="badge" style="background:var(--coral-soft)">📥</div>
+      <div class="badge" style="background:var(--coral-soft); color:var(--coral);">${icon('inbox',20)}</div>
       <div><div class="r-title">${pendingCount} مشاركة تنتظر المراجعة</div><div class="r-sub">اضغطي لاعتماد أو رفض المشاركات</div></div>
       <span class="chev">←</span>
     </button>
     <div class="section-title">🔥 تحدي اليوم</div>
     <form id="challengeForm" class="challenge-edit-card">
       <textarea id="challengeInput" placeholder="مثال: اشرحي في 60 ثانية: لماذا لا يسقط برج بيزا؟">${state.challenge && state.challenge.text ? state.challenge.text : ''}</textarea>
-      <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الحفظ...':(state.challenge && state.challenge.text ? '💾 تحديث التحدي' : '🚀 نشر تحدي اليوم')}</button>
+      <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الحفظ...':(state.challenge && state.challenge.text ? icon('save',17)+' تحديث التحدي' : icon('plus',17)+' نشر تحدي اليوم')}</button>
     </form>
 
     <div class="info-card">
@@ -1236,14 +1273,14 @@ function viewTeacherHome(){
       ✅ المحتوى الأساسي موجود. تقدرين تضغطين "تهيئة/تحديث الدروس الأساسية" في أي وقت
       لتحديث قائمة الدروس الافتراضية (هذا آمن ولا يحذف مشاركات الطالبات لاحقًا).`}
     </div>
-    <button class="btn btn-primary" style="margin-top:14px;" data-action="seed-content" ${state.loading?'disabled':''}>${state.loading?'جارِ التهيئة...':'🔄 تهيئة / تحديث الدروس الأساسية'}</button>
+    <button class="btn btn-primary" style="margin-top:14px;" data-action="seed-content" ${state.loading?'disabled':''}>${state.loading?'جارِ التهيئة...':icon('refresh',17)+' تهيئة / تحديث الدروس الأساسية'}</button>
     ${subjCount>0 ? `
     <div class="section-title">إضافة درس جديد لمادة ${state.subjects[0] ? state.subjects[0].name : ''}</div>
     <form id="addLessonForm">
       <div class="field">
         <input type="text" id="newLessonTitle" placeholder="مثال: قوانين نيوتن للحركة" required>
       </div>
-      <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الإضافة...':'➕ إضافة الدرس'}</button>
+      <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الإضافة...':icon('plus',17)+' إضافة الدرس'}</button>
     </form>
     <div class="section-title">الدروس الحالية (${lessonCount})</div>
     <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
@@ -1273,9 +1310,9 @@ function pendingPostCard(p){
     ${p.voiceNote && p.voiceNote.dataUrl ? `<audio controls src="${p.voiceNote.dataUrl}" class="post-audio" style="margin-bottom:12px;"></audio>` : ''}
     ${mindMapBlock(p)}
     <div style="display:flex; gap:8px;">
-      <button class="btn btn-primary" style="width:auto; flex:1;" data-action="approve-post" data-id="${p.id}">✓ اعتماد</button>
-      <button class="btn" style="width:auto; flex:1; background:var(--surface); border:1.5px solid var(--border); color:var(--ink);" data-action="reject-post" data-id="${p.id}">✕ رفض</button>
-      <button class="btn" style="width:auto; padding:0 14px; background:var(--danger-soft); color:var(--danger);" data-action="delete-post" data-id="${p.id}">🗑️</button>
+      <button class="btn btn-primary" style="width:auto; flex:1;" data-action="approve-post" data-id="${p.id}">${icon('check',17)} اعتماد</button>
+      <button class="btn" style="width:auto; flex:1; background:var(--surface); border:1.5px solid var(--border); color:var(--ink);" data-action="reject-post" data-id="${p.id}">${icon('close',17)} رفض</button>
+      <button class="btn" style="width:auto; padding:0 14px; background:var(--danger-soft); color:var(--danger);" data-action="delete-post" data-id="${p.id}">${icon('trash',17)}</button>
     </div>
   </div>`;
 }
