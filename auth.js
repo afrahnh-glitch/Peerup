@@ -6,6 +6,9 @@ import {
 import {
   getFirestore, doc, getDoc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  getStorage, ref, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 import { firebaseConfig } from "./firebase-config.js";
 import {
   fetchSubjects, fetchLessons, fetchLesson, seedInitialContent, addLesson,
@@ -31,6 +34,7 @@ const POST_TYPES = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 /* ---------- state ---------- */
 function effectiveTheme(){
@@ -80,7 +84,51 @@ function setState(patch){ Object.assign(state, patch); render(); }
    نفسه في Firestore — بدون صور، بدون Storage، بدون اشتراك مدفوع. */
 let mapDoc = null;   // الخريطة الجاري بناؤها؛ تبقى بالذاكرة أثناء كتابة المشاركة
 let mmOpen = null;   // المحرر المفتوح حاليًا (إن وُجد)
-let attachMode = null;   // null | 'voice' | 'map' — المرفق المختار حاليًا بنموذج المشاركة
+let attachMode = null;   // null | 'voice' | 'map' | 'photo' — المرفق المختار حاليًا بنموذج المشاركة
+
+/* ---------- صورة حقيقية (Firebase Storage، يحتاج خطة Blaze) ----------
+   نضغط الصورة بالمتصفح قبل الرفع (أقصى بُعد 1280px، JPEG) حتى ما يكبر
+   حجم التخزين والنقل بدون داعٍ — خطة Blaze تُحاسَب على الاستخدام. ---------- */
+let photoBlob = null;      // الصورة المضغوطة الجاهزة للرفع
+let photoPreviewUrl = null; // رابط معاينة محلي (object URL)
+function compressImage(file, maxDim = 1280, quality = 0.82){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      let {width, height} = img;
+      if(width > maxDim || height > maxDim){
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width * scale); height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('compress failed')), 'image/jpeg', quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load failed')); };
+    img.src = url;
+  });
+}
+async function handlePhotoSelect(file){
+  if(!file || !file.type.startsWith('image/')){ showToast('اختاري ملف صورة فقط.'); return; }
+  try{
+    const blob = await compressImage(file);
+    if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    photoBlob = blob;
+    photoPreviewUrl = URL.createObjectURL(blob);
+  }catch(err){
+    showToast('تعذّر تجهيز الصورة، جربي صورة ثانية.');
+    return;
+  }
+  renderAttachArea();
+}
+function discardPhoto(){
+  if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+  photoBlob = null; photoPreviewUrl = null;
+  renderAttachArea();
+}
 let challengeMode = null; // null | 'text' | 'voice' | 'map' — طريقة الرد على تحدي اليوم
 
 /* ---------- تسجيل صوتي: يُخزَّن كـ Base64 داخل نفس مستند المشاركة
@@ -180,14 +228,35 @@ function renderAttachArea(){
   const box = document.getElementById('attachArea');
   if(!box) return;
   box.innerHTML = `
-    <div class="attach-toggle">
-      <button type="button" class="attach-opt ${attachMode==='voice'?'selected':''}" data-action="pick-attach" data-mode="voice">🎙️ تسجيل صوتي</button>
-      <button type="button" class="attach-opt ${attachMode==='map'?'selected':''}" data-action="pick-attach" data-mode="map">🧠 خريطة ذهنية</button>
+    <div class="attach-toggle three">
+      <button type="button" class="attach-opt ${attachMode==='photo'?'selected':''}" data-action="pick-attach" data-mode="photo">📷 صورة</button>
+      <button type="button" class="attach-opt ${attachMode==='voice'?'selected':''}" data-action="pick-attach" data-mode="voice">🎙️ صوت</button>
+      <button type="button" class="attach-opt ${attachMode==='map'?'selected':''}" data-action="pick-attach" data-mode="map">🧠 خريطة</button>
     </div>
+    ${attachMode==='photo' ? '<div id="photoArea" class="attach-body"></div>' : ''}
     ${attachMode==='voice' ? '<div id="voiceArea" class="attach-body"></div>' : ''}
     ${attachMode==='map' ? '<div id="mapPreview" class="attach-body mm-preview"></div>' : ''}`;
+  if(attachMode === 'photo') renderPhotoArea();
   if(attachMode === 'voice') renderVoiceArea();
   if(attachMode === 'map') renderMapPreview();
+}
+function renderPhotoArea(){
+  const box = document.getElementById('photoArea');
+  if(!box) return;
+  if(photoPreviewUrl){
+    box.innerHTML = `
+      <img src="${photoPreviewUrl}" class="photo-preview" alt="معاينة الصورة">
+      <div class="voice-actions">
+        <label class="pill-btn" for="photoInput">🔁 استبدال الصورة</label>
+        <button type="button" class="pill-btn" data-action="discard-photo">🗑️ حذف</button>
+      </div>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">`;
+  } else {
+    box.innerHTML = `
+      <label class="btn btn-primary" for="photoInput" style="display:flex; cursor:pointer;">📷 اختاري أو صوّري صورة</label>
+      <div class="hint" style="text-align:center; margin-top:6px;">تُضغط تلقائيًا قبل الرفع</div>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">`;
+  }
 }
 
 function currentPostLessonTitle(){
@@ -475,8 +544,16 @@ async function handleSubmitPost(){
   const voice = (attachMode === 'voice' && voiceNote) ? voiceNote : null;
   if(voice && voice.dataUrl.length > 400000){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
   if(attachMode === 'voice' && mediaRecorder && mediaRecorder.state === 'recording'){ showToast('أوقفي التسجيل قبل الإرسال.'); return; }
+  if(attachMode === 'photo' && !photoBlob){ showToast('اختاري صورة قبل الإرسال.'); return; }
   setState({loading:true});
   try{
+    let imageUrl = null;
+    if(attachMode === 'photo' && photoBlob){
+      const path = `posts/${state.profile.uid}/${Date.now()}.jpg`;
+      const fileRef = ref(storage, path);
+      await uploadBytes(fileRef, photoBlob, {contentType: 'image/jpeg'});
+      imageUrl = await getDownloadURL(fileRef);
+    }
     const lesson = (state.lessons || []).find(l => l.id === lessonId);
     await createPost(db, {
       lessonId,
@@ -487,15 +564,22 @@ async function handleSubmitPost(){
       content,
       mindMap,
       voiceNote: voice,
+      imageUrl,
     });
     mapDoc = null;
     voiceNote = null;
+    if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    photoBlob = null; photoPreviewUrl = null;
     attachMode = null;
     setState({loading:false});
     navigate('shareSuccess');
   }catch(err){
     setState({loading:false});
-    showToast('صار خطأ أثناء الإرسال، حاولي مرة أخرى.');
+    if(attachMode === 'photo'){
+      showToast('تعذّر رفع الصورة. تأكدي من تفعيل Storage بمشروعك، أو حاولي بصورة أصغر.');
+    } else {
+      showToast('صار خطأ أثناء الإرسال، حاولي مرة أخرى.');
+    }
   }
 }
 async function handleSubmitQuestion(){
@@ -870,6 +954,7 @@ function postCard(p){
     </div>
     ${p.title ? `<div class="p-title">${p.title}</div>` : ''}
     <div class="p-body">${p.content}</div>
+    ${p.imageUrl ? `<img src="${p.imageUrl}" class="post-image" alt="صورة الشرح" loading="lazy">` : ''}
     ${p.voiceNote && p.voiceNote.dataUrl ? `<audio controls src="${p.voiceNote.dataUrl}" class="post-audio"></audio>` : ''}
     ${mindMapBlock(p)}
     ${!pending ? `
@@ -947,7 +1032,7 @@ function viewSharePost(){
       <div id="attachArea"></div>
       <div class="hint">يُرسل مع شرحك للمعلمة، ويظهر لزميلاتك بعد الاعتماد.</div>
     </div>
-    <button class="btn btn-primary" data-action="submit-post" ${state.loading?'disabled':''}>${state.loading?'جارِ الإرسال...':'إرسال للمعلمة'}</button>
+    <button class="btn btn-primary" data-action="submit-post" ${state.loading?'disabled':''}>${state.loading?(attachMode==='photo'?'جارِ رفع الصورة...':'جارِ الإرسال...'):'إرسال للمعلمة'}</button>
   </div>`;
 }
 
@@ -1184,6 +1269,7 @@ function pendingPostCard(p){
     </div>
     ${p.title ? `<div class="p-title">${p.title}</div>` : ''}
     <div class="p-body" style="margin-bottom:12px;">${p.content}</div>
+    ${p.imageUrl ? `<img src="${p.imageUrl}" class="post-image" alt="صورة الشرح" loading="lazy" style="margin-bottom:12px;">` : ''}
     ${p.voiceNote && p.voiceNote.dataUrl ? `<audio controls src="${p.voiceNote.dataUrl}" class="post-audio" style="margin-bottom:12px;"></audio>` : ''}
     ${mindMapBlock(p)}
     <div style="display:flex; gap:8px;">
@@ -1282,6 +1368,9 @@ document.addEventListener('change', (e) => {
     state.shareLessonId = e.target.value;
     if(mapDoc && mmSetDefaultTitle(mapDoc, lessonTitleById(e.target.value))) renderMapPreview();
   }
+  if(e.target.id === 'photoInput' && e.target.files && e.target.files[0]){
+    handlePhotoSelect(e.target.files[0]);
+  }
 });
 
 document.addEventListener('input', (e) => {
@@ -1334,6 +1423,8 @@ document.addEventListener('click', (e) => {
     mapDoc = null;
     attachMode = null;
     voiceNote = null;
+    if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    photoBlob = null; photoPreviewUrl = null;
     if(mediaRecorder && mediaRecorder.state !== 'inactive') stopRecording();
     navigate('sharePost');
   } else if(action === 'nav-challenge-share'){
@@ -1357,6 +1448,8 @@ document.addEventListener('click', (e) => {
     renderVoiceArea();
   } else if(action === 'discard-voice'){
     discardVoice();
+  } else if(action === 'discard-photo'){
+    discardPhoto();
   } else if(action === 'open-mindmap'){
     openMapEditor();
   } else if(action === 'clear-mindmap'){
