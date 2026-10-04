@@ -936,8 +936,8 @@ function viewStudentHome(){
           <div class="hero-avatar">${avatarHtml(p, 36)}</div>
         </div>
       </div>
-      <h1>صباح الخير، ${p.displayName || ''} 👋</h1>
-      <p class="sub">وش ودك تسوين اليوم؟</p>
+      <h1>اهلّا بك، ${p.displayName || ''} 👋</h1>
+      <p class="sub">اكتشفي، شاركي، ارتقي</p>
       ${s ? `
       <div class="hero-stats">
         <div class="hero-stat"><span class="hs-ic">⭐</span><span class="hs-v">${s.points}</span><span class="hs-l">نقطة</span></div>
