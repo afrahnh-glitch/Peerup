@@ -20,6 +20,7 @@ import {
   attachBookmarkInfo, addBookmark, removeBookmark, fetchBookmarkedPosts,
   fetchAllApprovedPosts,
   setAvatar, attachAvatarInfo, fetchAvatarsFor,
+  setSpaceProgress, shareSpaceFact, fetchRecentSpaceFacts,
 } from "./content.js";
 import {
   MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc, mmNodesLabel,
@@ -67,6 +68,21 @@ function icon(name, size = 20){
    avatarHtml() هي نقطة الاستخدام الموحّدة بكل مكان يظهر فيه ملف طالبة.
    ================================================================== */
 const AVATAR_IDS = ['avatar-01', 'avatar-02', 'avatar-03', 'avatar-04', 'avatar-05', 'avatar-06'];
+
+/* ---------- أسبوع الفضاء: محتوى رحلة الاستكشاف (ميزة موسمية) ---------- */
+const SPACE_QUIZ = {
+  q: 'أي كوكب بالمجموعة الشمسية أقرب للشمس؟',
+  options: ['الأرض', 'عطارد', 'الزهرة', 'المريخ'],
+  correct: 1,
+  explain: 'عطارد أقرب كوكب للشمس، ويكمل دورة كاملة حولها خلال 88 يومًا أرضيًا بس.',
+};
+const SPACE_FACTS = [
+  'أشعة الشمس تحتاج حوالي 8 دقائق و20 ثانية عشان توصل للأرض.',
+  'المريخ فيه أكبر بركان بالمجموعة الشمسية، وارتفاعه يقارب 3 أضعاف ارتفاع إفرست.',
+  'يوم واحد على كوكب الزهرة أطول من سنته الكاملة حول الشمس.',
+  'نظام الكواكب الحلقية مو بس لزحل — عطارد والمشتري وأورانوس ونبتون عندهم حلقات أخف بكثير.',
+  'الفضاء مو فاضي تمامًا؛ فيه جزيئات غاز وغبار متناثرة حتى بين النجوم.',
+];
 // profile-like: أي كائن فيه (avatarUrl أو avatarId) و(displayName أو studentName)
 function avatarHtml(obj, size = 44){
   const name = obj.displayName || obj.studentName || '?';
@@ -106,6 +122,11 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 
 /* ---------- state ---------- */
+// تحية تتغيّر حسب وقت الجهاز: ٥ص–١١:٥٩ص صباح الخير، وإلا مساء الخير
+function greetingWord(){
+  const h = new Date().getHours();
+  return (h >= 5 && h < 12) ? 'صباح الخير' : 'مساء الخير';
+}
 function effectiveTheme(){
   const stored = document.documentElement.getAttribute('data-theme');
   if(stored) return stored;
@@ -148,6 +169,10 @@ const state = {
   allStudents: [],
   viewedStudent: null,
   viewedStats: null,
+  spaceStation: 1,
+  spaceQuizAnswer: null,
+  spaceFactIndex: 0,
+  spaceRecentFacts: [],
   history: [],           // in-app back stack once inside student/teacher screens
 };
 
@@ -628,6 +653,50 @@ async function refreshHomeStats(){
   const myStats = await computeStudentPoints(db, state.profile.uid).catch(() => state.myStats);
   setState({myStats});
 }
+function openSpaceJourney(){
+  setState({spaceStation: 1, spaceQuizAnswer: null, spaceFactIndex: 0, spaceRecentFacts: []});
+  navigate('spaceJourney');
+}
+async function handleSpaceQuizAnswer(i){
+  if(state.spaceQuizAnswer !== null) return;
+  setState({spaceQuizAnswer: i});
+  if(i === SPACE_QUIZ.correct){
+    try{
+      await setSpaceProgress(db, state.profile.uid, {spaceWeekQuizCorrect: true});
+      const myStats = await computeStudentPoints(db, state.profile.uid).catch(() => state.myStats);
+      setState({myStats});
+    }catch(err){ /* صامت: الإجابة صحيحة محليًا حتى لو فشل حفظ النقاط مؤقتًا */ }
+  }
+}
+async function openSpaceFactsWall(){
+  const spaceRecentFacts = await fetchRecentSpaceFacts(db, 6).catch(() => []);
+  setState({spaceRecentFacts});
+}
+function handleSpaceNextStation(){
+  if(state.spaceStation === 1){ setState({spaceStation: 2}); }
+  else if(state.spaceStation === 2){ setState({spaceStation: 3}); openSpaceFactsWall(); }
+}
+function handleSpaceNextFact(){
+  setState({spaceFactIndex: (state.spaceFactIndex + 1) % SPACE_FACTS.length});
+}
+async function handleSubmitSpaceFact(){
+  const text = document.getElementById('spaceFactInput').value.trim();
+  if(!text){ showToast('اكتبي معلومتك قبل المشاركة'); return; }
+  setState({loading: true});
+  try{
+    await shareSpaceFact(db, {uid: state.profile.uid, studentName: state.profile.displayName, text});
+    await setSpaceProgress(db, state.profile.uid, {spaceWeekBadge: true});
+    const myStats = await computeStudentPoints(db, state.profile.uid).catch(() => state.myStats);
+    setState({
+      loading: false, myStats, spaceStation: 'done',
+      profile: {...state.profile, spaceWeekBadge: true},
+    });
+  }catch(err){
+    setState({loading: false});
+    showToast('صار خطأ أثناء المشاركة، حاولي مرة أخرى.');
+  }
+}
+
 async function openAchievements(){
   setState({loading:true});
   const [myStats, leaderboard] = await Promise.all([
@@ -847,6 +916,7 @@ function brandHeader(sub){
     <img src="images/logo-white.png" class="brand-mark brand-mark-dark" alt="PeerUp">
     <div class="bname">PeerUp</div>
     <div class="tag">نرتقي معًا</div>
+    <div class="dev-credit">منصة تعليمية من تطوير<br>المعلمة أفراح الحربي</div>
     ${sub ? `<div class="slogan">${sub}</div>` : ''}
   </div>`;
 }
@@ -938,6 +1008,112 @@ function viewAuthForm(){
   </div>`;
 }
 
+function spaceStationDot(num, label){
+  const st = state.spaceStation;
+  const status = st === 'done' || num < st ? 'done' : (num === st ? 'current' : 'locked');
+  return `<div class="journey-dot ${status}"><span class="journey-dot-ic">${status === 'done' ? icon('check', 14) : num}</span><span class="journey-dot-label">${label}</span></div>`;
+}
+function viewSpaceJourney(){
+  return `
+  <div class="content-app">
+    ${pageHead('رحلة PeerUp في الفضاء', 'اكتشفي، فكري، وشاركي معرفتك في رحلة قصيرة بين الكواكب والنجوم.')}
+    <div class="journey-path">
+      ${spaceStationDot(1, 'استكشفي')}
+      <div class="journey-line ${state.spaceStation === 'done' || state.spaceStation > 1 ? 'done' : ''}"></div>
+      ${spaceStationDot(2, 'اكتشفي')}
+      <div class="journey-line ${state.spaceStation === 'done' || state.spaceStation > 2 ? 'done' : ''}"></div>
+      ${spaceStationDot(3, 'شاركي')}
+    </div>
+    ${state.spaceStation === 'done' ? spaceJourneyCompleteHtml()
+      : state.spaceStation === 1 ? spaceStation1Html()
+      : state.spaceStation === 2 ? spaceStation2Html()
+      : spaceStation3Html()}
+  </div>`;
+}
+function spaceStation1Html(){
+  const answered = state.spaceQuizAnswer !== null;
+  return `
+  <div class="journey-station">
+    <h3 class="journey-station-title">🔭 استكشفي</h3>
+    <p class="journey-station-desc">اختبري معرفتك بسؤال قصير عن الفضاء والفيزياء.</p>
+    <div class="quiz-card">
+      <div class="quiz-q">${SPACE_QUIZ.q}</div>
+      ${SPACE_QUIZ.options.map((opt, i) => `
+        <button class="quiz-opt ${answered ? (i === SPACE_QUIZ.correct ? 'correct' : (i === state.spaceQuizAnswer ? 'wrong' : '')) : ''}"
+          data-action="answer-space-quiz" data-i="${i}" ${answered ? 'disabled' : ''}>${opt}</button>`).join('')}
+      ${answered ? `
+      <div class="quiz-feedback ${state.spaceQuizAnswer === SPACE_QUIZ.correct ? 'good' : 'bad'}">
+        ${state.spaceQuizAnswer === SPACE_QUIZ.correct ? 'أحسنتِ! إجابة صحيحة' : `الإجابة الصحيحة: ${SPACE_QUIZ.options[SPACE_QUIZ.correct]}`}
+        <div class="quiz-explain">${SPACE_QUIZ.explain}</div>
+      </div>
+      <button class="btn btn-primary" data-action="space-next-station">التالي ←</button>` : ''}
+    </div>
+  </div>`;
+}
+function spaceStation2Html(){
+  const fact = SPACE_FACTS[state.spaceFactIndex % SPACE_FACTS.length];
+  return `
+  <div class="journey-station">
+    <h3 class="journey-station-title">🪐 اكتشفي</h3>
+    <p class="journey-station-desc">اكتشفي معلومة فضائية قصيرة ومثيرة.</p>
+    <div class="fact-card">
+      <div class="fact-tag">هل تعلمين؟</div>
+      <div class="fact-text">${fact}</div>
+      <button type="button" class="pill-btn" data-action="space-next-fact">معلومة ثانية ${icon('refresh', 13)}</button>
+    </div>
+    <button class="btn btn-primary" style="margin-top:16px;" data-action="space-next-station">التالي ←</button>
+  </div>`;
+}
+function spaceStation3Html(){
+  return `
+  <div class="journey-station">
+    <h3 class="journey-station-title">🚀 شاركي</h3>
+    <p class="journey-station-desc">اكتبي معلومة أو حقيقة فضائية تعرفينها وشاركي معرفتك مع زميلاتك.</p>
+    <textarea id="spaceFactInput" class="journey-share-input" placeholder="اكتبي معلومتك الفضائية هنا..."></textarea>
+    <button class="btn btn-primary" data-action="submit-space-fact" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ المشاركة...' : 'شاركي معرفتك'}</button>
+    ${state.spaceRecentFacts.length ? `
+    <div class="section-title" style="margin-top:24px;">معلومات شاركتها زميلاتك</div>
+    ${state.spaceRecentFacts.map(f => `<div class="fact-mini"><b>${f.studentName}:</b> ${f.text}</div>`).join('')}` : ''}
+  </div>`;
+}
+function spaceJourneyCompleteHtml(){
+  const s = state.myStats || {points: 0};
+  return `
+  <div class="journey-complete">
+    <img src="images/rocket.svg" class="journey-complete-rocket" alt="">
+    <h2>أتممتِ المهمة!</h2>
+    <p>المعرفة رحلة… وكل مشاركة تقرّبنا من النجوم.</p>
+    <div class="points-big">${s.points} PeerPoints</div>
+    <div class="badge-earned-card" style="margin:18px auto 0; max-width:260px;">
+      <img src="images/planet.svg" class="badge-earned-icon" alt="" aria-hidden="true">
+      <div><div class="badge-earned-title">مستكشفة PeerUp</div><div class="badge-earned-sub">تم الحصول عليها</div></div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:20px;" data-action="nav-student-home">رجوع للرئيسية</button>
+  </div>`;
+}
+
+function viewAboutStory(){
+  return `
+  <div class="content-app about-story">
+    ${pageHead('قصة PeerUp')}
+    <img src="images/stars.svg" class="about-stars" alt="" aria-hidden="true">
+    <h2 class="about-title">من فكرة تطوعية إلى رحلة معرفية</h2>
+    <p class="about-p">بدأت PeerUp من فكرة بسيطة:<br>ماذا لو أصبحت معرفة الطالبة وسيلة لمساعدة طالبة أخرى؟</p>
+
+    <div class="about-flow">
+      ${['افهمي','شاركي','اسألي','ساعدي','ارتقي'].map((w,i,arr) => `
+        <span class="about-flow-step">${w}</span>${i<arr.length-1 ? '<span class="about-flow-arrow">←</span>' : ''}`).join('')}
+    </div>
+
+    <h3 class="about-h3">لماذا PeerUp؟</h3>
+    <p class="about-p">لأن التعلم لا يتوقف عند أن أفهم أنا…<br>بل يكتمل عندما أساعد غيري على الفهم.</p>
+
+    <div class="about-closing">
+      <p>كل طالبة تعرف شيئًا…<br>قد تكون سببًا في أن تعرفه طالبة أخرى.</p>
+    </div>
+  </div>`;
+}
+
 /* ---------- student views ---------- */
 function viewStudentHome(){
   const p = state.profile || {};
@@ -956,8 +1132,8 @@ function viewStudentHome(){
           <div class="hero-avatar">${avatarHtml(p, 36)}</div>
         </div>
       </div>
-      <h1>صباح الخير، ${p.displayName || ''} 👋</h1>
-      <p class="sub">وش ودك تسوين اليوم؟</p>
+      <h1>${greetingWord()}، ${p.displayName || ''} 👋</h1>
+      <p class="sub">افهمي، ساعدي، ارتقي…</p>
       ${s ? `
       <div class="hero-stats">
         <div class="hero-stat"><span class="hs-ic">⭐</span><span class="hs-v">${s.points}</span><span class="hs-l">نقطة</span></div>
@@ -990,6 +1166,14 @@ function viewStudentHome(){
         <button class="btn challenge-btn" data-action="nav-challenge-share">أشارك بالتحدي ←</button>
       </div>` : ''}
 
+      <div class="space-week-card">
+        <img src="images/planet.svg" class="space-week-planet" alt="" aria-hidden="true">
+        <img src="images/stars.svg" class="space-week-stars" alt="" aria-hidden="true">
+        <div class="space-week-tag">أسبوع الفضاء مع PeerUp</div>
+        <div class="space-week-text">لأن المعرفة رحلة… والفضاء أعظم رحلة.</div>
+        <button class="btn space-week-btn" data-action="nav-space-journey">ابدئي رحلة الاستكشاف ←</button>
+      </div>
+
       ${lessons.length ? `
       <div class="section-title">📚 دروس ${subj ? subj.name : ''}</div>
       <div class="lesson-list">
@@ -1004,6 +1188,10 @@ function viewStudentHome(){
         <span class="emoji">📭</span>
         المحتوى لسه ما تهيّأ. اطلبي من معلمتك تسجل دخولها وتضغط زر "تهيئة المحتوى" من لوحتها.
       </div>`}
+      <button class="peerup-credit" data-action="nav-about-story">
+        <div class="credit-name">PeerUp</div>
+        <div class="credit-sub">من تطوير المعلمة أفراح الحربي</div>
+      </button>
       <button class="link-btn" data-action="logout">تسجيل الخروج</button>
     </div>
   </div>`;
@@ -1312,6 +1500,11 @@ function viewAchievements(){
       <div class="stat-mini"><div class="num">${s.helpedCount}</div><div class="lbl">🤝 ساعدتِ طالبات</div></div>
       <div class="stat-mini"><div class="num">${s.likesReceived}</div><div class="lbl">⭐ أفادني</div></div>
     </div>
+    ${p.spaceWeekBadge ? `
+    <div class="badge-earned-card">
+      <img src="images/planet.svg" class="badge-earned-icon" alt="" aria-hidden="true">
+      <div><div class="badge-earned-title">مستكشفة PeerUp</div><div class="badge-earned-sub">تم الحصول عليها</div></div>
+    </div>` : ''}
     <div class="section-title stars-title-row"><img src="images/stars.svg" class="title-stars" alt="">🔥 نجوم PeerUp</div>
     <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
       ${board.length ? board.map((st,i) => {
@@ -1575,6 +1768,8 @@ function render(){
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
   if(state.view === 'achievements'){ app.innerHTML = viewAchievements() + studentNav(); return; }
   if(state.view === 'savedPosts'){ app.innerHTML = viewSavedPosts() + studentNav(); return; }
+  if(state.view === 'aboutStory'){ app.innerHTML = viewAboutStory() + studentNav(); return; }
+  if(state.view === 'spaceJourney'){ app.innerHTML = viewSpaceJourney() + studentNav(); return; }
   if(state.view === 'studentsList'){ app.innerHTML = viewStudentsList() + studentNav(); return; }
   if(state.view === 'studentProfile'){ app.innerHTML = viewStudentProfile() + studentNav(); return; }
   if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
@@ -1713,6 +1908,18 @@ document.addEventListener('click', (e) => {
     openAchievements();
   } else if(action === 'nav-saved-posts'){
     openSavedPosts();
+  } else if(action === 'nav-about-story'){
+    navigate('aboutStory');
+  } else if(action === 'nav-space-journey'){
+    openSpaceJourney();
+  } else if(action === 'answer-space-quiz'){
+    handleSpaceQuizAnswer(Number(el.dataset.i));
+  } else if(action === 'space-next-station'){
+    handleSpaceNextStation();
+  } else if(action === 'space-next-fact'){
+    handleSpaceNextFact();
+  } else if(action === 'submit-space-fact'){
+    handleSubmitSpaceFact();
   } else if(action === 'nav-students-list'){
     openStudentsList();
   } else if(action === 'view-student-profile'){
