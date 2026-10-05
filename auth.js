@@ -1015,7 +1015,8 @@ function spaceStationDot(num, label){
 }
 function viewSpaceJourney(){
   return `
-  <div class="content-app">
+  <div class="content-app space-journey-bg">
+    <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
     ${pageHead('رحلة PeerUp في الفضاء', 'اكتشفي، فكري، وشاركي معرفتك في رحلة قصيرة بين الكواكب والنجوم.')}
     <div class="journey-path">
       ${spaceStationDot(1, 'استكشفي')}
