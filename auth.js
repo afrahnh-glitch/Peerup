@@ -21,6 +21,7 @@ import {
   fetchAllApprovedPosts,
   setAvatar, attachAvatarInfo, fetchAvatarsFor,
   setSpaceProgress, shareSpaceFact, fetchRecentSpaceFacts,
+  submitLandingComment, fetchLandingComments, deleteLandingComment,
 } from "./content.js";
 import {
   MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc, mmNodesLabel,
@@ -173,6 +174,7 @@ const state = {
   spaceQuizAnswer: null,
   spaceFactIndex: 0,
   spaceRecentFacts: [],
+  landingComments: [],
   history: [],           // in-app back stack once inside student/teacher screens
 };
 
@@ -584,6 +586,12 @@ function navigate(view, extra={}){
   state.history.push(state.view);
   setState({view, ...extra});
 }
+// صفحة البداية عامة (أي زائر، قبل تسجيل الدخول)، فنجيب التعليقات العامة
+// معها مباشرة بدل ما ننتظر أي حالة تسجيل دخول.
+async function openLanding(){
+  const landingComments = await fetchLandingComments(db, 12).catch(() => []);
+  setState({view: 'landing', landingComments});
+}
 function goBack(){
   const prev = state.history.pop();
   if(prev) setState({view: prev});
@@ -660,7 +668,9 @@ function openSpaceJourney(){
 async function handleSpaceQuizAnswer(i){
   if(state.spaceQuizAnswer !== null) return;
   setState({spaceQuizAnswer: i});
-  if(i === SPACE_QUIZ.correct){
+  // زائرة بدون حساب: تشوف صح/خطأ والتفسير عادي، بس ما فيه نقاط تُحفظ —
+  // مافيه حساب أصلًا نربط فيه هالنقاط.
+  if(i === SPACE_QUIZ.correct && state.profile){
     try{
       await setSpaceProgress(db, state.profile.uid, {spaceWeekQuizCorrect: true});
       const myStats = await computeStudentPoints(db, state.profile.uid).catch(() => state.myStats);
@@ -847,6 +857,35 @@ async function handleAddLesson(title){
     showToast('صار خطأ أثناء إضافة الدرس. تأكدي إنك مسجّلة كمعلمة.');
   }
 }
+/* ---------- تعليقات الزوار بصفحة البداية (بدون تسجيل دخول) ---------- */
+async function handleSubmitLandingComment(){
+  const name = document.getElementById('commenterName').value.trim();
+  const text = document.getElementById('commenterText').value.trim();
+  if(!name || !text){ showToast('اكتبي اسمك ورأيك قبل الإرسال'); return; }
+  // حدّ بسيط من طرف المتصفح (مرة كل 30 ثانية) يمنع الضغط المتكرر بالخطأ أو
+  // سبام بسيط. هذا مو حماية حقيقية على مستوى الخادم (تحتاج Cloud Functions)،
+  // بس أبسط رادع ممكن بدون بنية تحتية جديدة.
+  let last = 0;
+  try{ last = Number(localStorage.getItem('peerup-last-comment') || 0); }catch(_e){ /* تجاهل */ }
+  if(Date.now() - last < 30000){
+    showToast('تم إرسال تعليق قبل قليل، جربي بعد شوي.');
+    return;
+  }
+  setState({loading: true});
+  try{
+    await submitLandingComment(db, {name, text});
+    try{ localStorage.setItem('peerup-last-comment', String(Date.now())); }catch(_e){ /* تجاهل */ }
+    const landingComments = await fetchLandingComments(db, 12).catch(() => state.landingComments);
+    document.getElementById('commenterName').value = '';
+    document.getElementById('commenterText').value = '';
+    setState({loading: false, landingComments});
+    showToast('شكرًا على رأيك! 💜');
+  }catch(err){
+    setState({loading: false});
+    showToast('صار خطأ أثناء الإرسال، حاولي مرة أخرى.');
+  }
+}
+
 async function handleSetChallenge(text){
   setState({loading:true});
   try{
@@ -868,6 +907,19 @@ async function openTeacherReview(){
   let pendingPosts = await fetchPendingPosts(db).catch(() => []);
   pendingPosts = await attachAvatarInfo(db, pendingPosts).catch(() => pendingPosts);
   navigate('teacherReview', {pendingPosts});
+}
+async function openTeacherComments(){
+  const landingComments = await fetchLandingComments(db, 100).catch(() => []);
+  navigate('teacherComments', {landingComments});
+}
+async function handleDeleteLandingComment(id){
+  try{
+    await deleteLandingComment(db, id);
+    setState({landingComments: (state.landingComments || []).filter(c => c.id !== id)});
+    showToast('تم إخفاء التعليق');
+  }catch(err){
+    showToast('صار خطأ أثناء الحذف، تأكدي إنك مسجّلة كمعلمة.');
+  }
 }
 async function handleApprovePost(id){
   try{
@@ -901,10 +953,10 @@ async function handleDeletePost(id){
 onAuthStateChanged(auth, async (user) => {
   if(user && state.view === 'loading' && !state.profile){
     await loadProfileAndGo(user.uid);
-  } else if(!user && state.view !== 'landing' && state.view !== 'authForm'){
-    setState({view:'landing'});
+  } else if(!user && state.view !== 'landing' && state.view !== 'roleChoice' && state.view !== 'authForm'){
+    openLanding();
   } else if(state.view === 'loading' && !user){
-    setState({view:'landing'});
+    openLanding();
   }
 });
 
@@ -951,8 +1003,67 @@ function teacherNav(){
 
 /* ---------- auth views ---------- */
 function viewLanding(){
+  const comments = state.landingComments || [];
+  return `
+  <div class="content landing-intro">
+    <div class="landing-hero">
+      <img src="images/logo.png" class="brand-mark" alt="PeerUp" style="margin-bottom:10px;">
+      <div class="bname">PeerUp</div>
+      <div class="tag">نرتقي معًا</div>
+      <div class="landing-flow-tag">افهمي، ساعدي، ارتقي…</div>
+      <p class="landing-intro-p">منصة تعليمية تشجع الطالبات على مشاركة المعرفة،<br>وطلب المساعدة، ومساعدة الزميلات على الفهم.</p>
+    </div>
+
+    <div class="landing-section">
+      <h3 class="landing-h3">قصة PeerUp</h3>
+      <p class="landing-p">بدأت PeerUp من فكرة بسيطة:<br>ماذا لو أصبحت معرفة الطالبة وسيلة لمساعدة طالبة أخرى؟</p>
+      <p class="landing-p">في PeerUp لا يقتصر التعلم على أن أفهم أنا،<br>بل يمتد إلى أن أشارك ما فهمته،<br>وأسأل عندما أحتاج المساعدة،<br>وأساعد غيري على الفهم.</p>
+      <div class="about-flow" style="margin-top:16px;">
+        ${['افهمي','شاركي','اسألي','ساعدي','ارتقي'].map((w,i,arr) => `
+          <span class="about-flow-step">${w}</span>${i<arr.length-1 ? '<span class="about-flow-arrow">←</span>' : ''}`).join('')}
+      </div>
+      <div class="landing-closing">
+        <p>كل طالبة تعرف شيئًا…<br>قد تكون سببًا في أن تعرفه طالبة أخرى.</p>
+      </div>
+    </div>
+
+    <div class="space-week-card" style="margin:22px 0;">
+      <img src="images/planet.svg" class="space-week-planet" alt="" aria-hidden="true">
+      <img src="images/stars.svg" class="space-week-stars" alt="" aria-hidden="true">
+      <div class="space-week-tag">PeerUp × أسبوع الفضاء</div>
+      <div class="space-week-text">المعرفة رحلة… والفضاء أعظم رحلة.</div>
+      <button class="btn space-week-btn" data-action="nav-space-journey">استكشفي رحلة الفضاء ←</button>
+    </div>
+
+    <div class="landing-section">
+      <h3 class="landing-h3">شاركونا رأيكم 💜</h3>
+      <form id="landingCommentForm" class="landing-comment-form">
+        <input type="text" id="commenterName" placeholder="اسمك" maxlength="40">
+        <textarea id="commenterText" placeholder="وش رأيك في PeerUp؟" maxlength="300"></textarea>
+        <button type="submit" class="btn btn-primary" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ الإرسال...' : 'إرسال التعليق'}</button>
+      </form>
+      ${comments.length ? `
+      <div class="landing-comments-rail">
+        ${comments.map(c => `
+          <div class="landing-comment-card">
+            <div class="landing-comment-name">${mmEsc(c.name)}</div>
+            <div class="landing-comment-text">${mmEsc(c.text)}</div>
+          </div>`).join('')}
+      </div>` : ''}
+    </div>
+
+    <div class="landing-dev-credit">من تطوير المعلمة أفراح الحربي</div>
+
+    <div class="landing-section" style="text-align:center;">
+      <h3 class="landing-h3">جاهزة للانضمام إلى PeerUp؟</h3>
+      <button class="btn btn-primary" data-action="nav-role-choice">تسجيل الدخول</button>
+    </div>
+  </div>`;
+}
+function viewRoleChoice(){
   return `
   <div class="content">
+    <button class="back-btn" data-action="back-to-landing-intro">←</button>
     ${brandHeader('من طالبة إلى طالبة… المعرفة تنتقل')}
     <div style="height:14px;"></div>
     <button class="role-card" data-action="choose-role" data-role="student">
@@ -1066,15 +1177,21 @@ function spaceStation2Html(){
   </div>`;
 }
 function spaceStation3Html(){
+  const loggedIn = !!state.profile;
   return `
   <div class="journey-station">
     <h3 class="journey-station-title">🚀 شاركي</h3>
     <p class="journey-station-desc">اكتبي معلومة أو حقيقة فضائية تعرفينها وشاركي معرفتك مع زميلاتك.</p>
+    ${loggedIn ? `
     <textarea id="spaceFactInput" class="journey-share-input" placeholder="اكتبي معلومتك الفضائية هنا..."></textarea>
-    <button class="btn btn-primary" data-action="submit-space-fact" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ المشاركة...' : 'شاركي معرفتك'}</button>
+    <button class="btn btn-primary" data-action="submit-space-fact" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ المشاركة...' : 'شاركي معرفتك'}</button>` : `
+    <div class="journey-visitor-note">
+      <p>سجّلي دخولك عشان تضيفين معلومتك وتُحفظ مشاركتك باسمك.</p>
+      <button class="btn btn-primary" data-action="nav-role-choice">تسجيل الدخول</button>
+    </div>`}
     ${state.spaceRecentFacts.length ? `
     <div class="section-title" style="margin-top:24px;">معلومات شاركتها زميلاتك</div>
-    ${state.spaceRecentFacts.map(f => `<div class="fact-mini"><b>${f.studentName}:</b> ${f.text}</div>`).join('')}` : ''}
+    ${state.spaceRecentFacts.map(f => `<div class="fact-mini"><b>${mmEsc(f.studentName)}:</b> ${mmEsc(f.text)}</div>`).join('')}` : ''}
   </div>`;
 }
 function spaceJourneyCompleteHtml(){
@@ -1633,6 +1750,11 @@ function viewTeacherHome(){
       <div><div class="r-title">${pendingCount} مشاركة تنتظر المراجعة</div><div class="r-sub">اضغطي لاعتماد أو رفض المشاركات</div></div>
       <span class="chev">←</span>
     </button>
+    <button class="role-card" data-action="nav-teacher-comments" style="margin-top:4px;">
+      <div class="badge" style="background:var(--primary-soft); color:var(--primary);">💬</div>
+      <div><div class="r-title">تعليقات الزوار</div><div class="r-sub">راجعي آراء الزوار وأخفي غير المناسب</div></div>
+      <span class="chev">←</span>
+    </button>
     <div class="section-title">🔥 تحدي اليوم</div>
     <form id="challengeForm" class="challenge-edit-card">
       <textarea id="challengeInput" placeholder="مثال: اشرحي في 60 ثانية: لماذا لا يسقط برج بيزا؟">${state.challenge && state.challenge.text ? state.challenge.text : ''}</textarea>
@@ -1690,6 +1812,25 @@ function pendingPostCard(p){
       <button class="btn" style="width:auto; flex:1; background:var(--surface); border:1.5px solid var(--border); color:var(--ink);" data-action="reject-post" data-id="${p.id}">${icon('close',17)} رفض</button>
       <button class="btn" style="width:auto; padding:0 14px; background:var(--danger-soft); color:var(--danger);" data-action="delete-post" data-id="${p.id}">${icon('trash',17)}</button>
     </div>
+  </div>`;
+}
+
+function viewTeacherComments(){
+  const comments = state.landingComments || [];
+  return `
+  <div class="content-app">
+    <div class="page-head" style="padding-top:2px;">
+      <div><h2>💬 تعليقات الزوار</h2><div class="p-sub">${comments.length} تعليق على صفحة البداية</div></div>
+    </div>
+    ${comments.length ? comments.map(c => `
+      <div class="post-card">
+        <div class="p-head">
+          <div style="flex:1;"><div class="p-who">${mmEsc(c.name)}</div></div>
+          <button class="btn" style="width:auto; padding:0 12px; background:var(--danger-soft); color:var(--danger);" data-action="delete-landing-comment" data-id="${c.id}">${icon('trash',16)}</button>
+        </div>
+        <div class="p-body">${mmEsc(c.text)}</div>
+      </div>`).join('') : `
+      <div class="empty-state"><span class="emoji">💬</span>ولا تعليق وصل بعد.</div>`}
   </div>`;
 }
 
@@ -1758,6 +1899,7 @@ function render(){
     return;
   }
   if(state.view === 'landing'){ app.innerHTML = viewLanding(); return; }
+  if(state.view === 'roleChoice'){ app.innerHTML = viewRoleChoice(); return; }
   if(state.view === 'authForm'){ app.innerHTML = viewAuthForm(); return; }
   if(state.view === 'studentHome'){ app.innerHTML = viewStudentHome() + studentNav(); return; }
   if(state.view === 'subjectLessons'){ app.innerHTML = viewSubjectLessons() + studentNav(); return; }
@@ -1770,11 +1912,12 @@ function render(){
   if(state.view === 'achievements'){ app.innerHTML = viewAchievements() + studentNav(); return; }
   if(state.view === 'savedPosts'){ app.innerHTML = viewSavedPosts() + studentNav(); return; }
   if(state.view === 'aboutStory'){ app.innerHTML = viewAboutStory() + studentNav(); return; }
-  if(state.view === 'spaceJourney'){ app.innerHTML = viewSpaceJourney() + studentNav(); return; }
+  if(state.view === 'spaceJourney'){ app.innerHTML = viewSpaceJourney() + (state.profile ? studentNav() : ''); return; }
   if(state.view === 'studentsList'){ app.innerHTML = viewStudentsList() + studentNav(); return; }
   if(state.view === 'studentProfile'){ app.innerHTML = viewStudentProfile() + studentNav(); return; }
   if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
   if(state.view === 'teacherReview'){ app.innerHTML = viewTeacherReview() + teacherNav(); return; }
+  if(state.view === 'teacherComments'){ app.innerHTML = viewTeacherComments() + teacherNav(); return; }
   if(state.view === 'teacherStats'){ app.innerHTML = viewTeacherStats() + teacherNav(); return; }
   app.innerHTML = viewLanding();
 }
@@ -1808,7 +1951,13 @@ document.addEventListener('click', (e) => {
   if(action === 'choose-role'){
     setState({view:'authForm', role: el.dataset.role, mode:'login', error:'', success:''});
   } else if(action === 'back-to-landing'){
-    setState({view:'landing', error:'', success:''});
+    // "رجوع" من نموذج الدخول يرجّع لخطوة اختيار الدور (الخطوة اللي قبلها
+    // مباشرة الآن بعد إضافة صفحة التعريف — مو لصفحة التعريف الطويلة).
+    setState({view:'roleChoice', error:'', success:''});
+  } else if(action === 'back-to-landing-intro'){
+    setState({view:'landing'});
+  } else if(action === 'nav-role-choice'){
+    setState({view:'roleChoice'});
   } else if(action === 'set-mode'){
     setState({mode: el.dataset.mode, error:'', success:''});
   } else if(action === 'install-app'){
@@ -1847,6 +1996,10 @@ document.addEventListener('click', (e) => {
     setState({view:'teacherHome', history:[]});
   } else if(action === 'nav-teacher-review'){
     openTeacherReview();
+  } else if(action === 'nav-teacher-comments'){
+    openTeacherComments();
+  } else if(action === 'delete-landing-comment'){
+    handleDeleteLandingComment(el.dataset.id);
   } else if(action === 'nav-teacher-stats'){
     openTeacherStats();
   } else if(action === 'approve-post'){
@@ -1972,6 +2125,11 @@ document.addEventListener('submit', (e) => {
     const text = document.getElementById('challengeInput').value.trim();
     if(!text){ showToast('اكتبي نص التحدي قبل النشر'); return; }
     handleSetChallenge(text);
+    return;
+  }
+  if(e.target.id === 'landingCommentForm'){
+    e.preventDefault();
+    handleSubmitLandingComment();
     return;
   }
   if(e.target.id !== 'authForm') return;
