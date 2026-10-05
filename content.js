@@ -253,6 +253,28 @@ export async function fetchAllApprovedPosts(db){
   return snap.docs.map(d => ({id: d.id, ...d.data()}));
 }
 
+/* ================= تعليقات صفحة البداية (بدون تسجيل دخول) =================
+   القاعدة بالأمن تتحقق من الشكل (طول الاسم/النص وحقول محدّدة بالضبط)،
+   هنا نضيف تحديدًا مطابقًا من طرف العميل + تعقيم أساسي قبل الإرسال
+   أصلًا (التعقيم عند العرض يصير بـauth.js عبر mmEsc الموجودة). ================= */
+export async function submitLandingComment(db, {name, text}){
+  await addDoc(collection(db, 'landingComments'), {
+    name: String(name).trim().slice(0, 40),
+    text: String(text).trim().slice(0, 300),
+    createdAt: serverTimestamp(), createdAtMs: Date.now(),
+  });
+}
+export async function fetchLandingComments(db, limitN = 12){
+  const snap = await getDocs(collection(db, 'landingComments'));
+  return snap.docs
+    .map(d => ({id: d.id, ...d.data()}))
+    .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0))
+    .slice(0, limitN);
+}
+export async function deleteLandingComment(db, id){
+  await deleteDoc(doc(db, 'landingComments', id));
+}
+
 /* ================= أسبوع الفضاء: رحلة الاستكشاف (ميزة موسمية) =================
    أبسط تخزين ممكن: Boolean واحد لكل علامة على ملف الطالبة نفسه، بدل
    بناء نظام شارات/إنجازات جديد كامل. ================= */
