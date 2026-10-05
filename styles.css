@@ -539,6 +539,42 @@ input{font-family:inherit;}
 .list-row .chev{margin-inline-start:auto; color:var(--ink-faint); flex-shrink:0;}
 .badge.sm{width:36px; height:36px; border-radius:12px; font-size:16px; box-shadow:0 6px 14px -8px rgba(23,37,84,.18);}
 
+.landing-intro{padding-top:calc(10px + env(safe-area-inset-top, 0px));}
+.landing-hero{text-align:center; margin-bottom:28px;}
+.landing-hero .brand-mark{width:60px; height:60px; display:block; margin:0 auto 10px; filter:drop-shadow(0 8px 16px rgba(91,63,216,.3));}
+.landing-hero .bname{font-family:'El Messiri'; font-weight:700; font-size:24px; color:var(--ink);}
+.landing-hero .tag{font-size:13px; color:var(--ink-soft); margin-top:2px;}
+.landing-flow-tag{
+  display:inline-block; margin-top:12px; font-family:'El Messiri'; font-weight:700; font-size:13px;
+  color:var(--primary); background:var(--primary-soft); border-radius:999px; padding:7px 16px;
+}
+.landing-intro-p{font-size:13px; color:var(--ink-soft); line-height:1.9; margin:16px 0 0;}
+
+.landing-section{margin-bottom:8px;}
+.landing-h3{font-family:'El Messiri'; font-weight:700; font-size:16.5px; color:var(--ink); text-align:center; margin:0 0 14px;}
+.landing-p{font-size:13.5px; color:var(--ink-soft); line-height:1.9; text-align:center; margin:0 0 14px;}
+.landing-closing{
+  text-align:center; margin-top:10px; padding:16px; border-radius:16px;
+  background:linear-gradient(130deg, var(--primary) 0%, var(--skyblue) 140%);
+}
+.landing-closing p{color:#fff; font-size:13px; font-weight:600; line-height:1.9; margin:0;}
+
+.landing-dev-credit{text-align:center; font-size:11px; color:var(--ink-faint); margin:26px 0 22px; opacity:.85;}
+
+.landing-comment-form{display:flex; flex-direction:column; gap:10px; margin-bottom:16px;}
+.landing-comment-form input, .landing-comment-form textarea{
+  width:100%; border:1.5px solid var(--border); border-radius:13px; padding:12px 13px;
+  font-size:14px; font-family:inherit; color:var(--ink); background:var(--surface);
+}
+.landing-comment-form textarea{min-height:80px; resize:vertical;}
+.landing-comments-rail{display:flex; gap:10px; overflow-x:auto; padding-bottom:6px; scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch;}
+.landing-comment-card{
+  flex:0 0 auto; scroll-snap-align:start; width:200px; background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:14px; box-shadow:0 8px 18px -14px rgba(23,37,84,.2);
+}
+.landing-comment-name{font-family:'El Messiri'; font-weight:700; font-size:12.5px; color:var(--primary); margin-bottom:6px;}
+.landing-comment-text{font-size:12px; color:var(--ink-soft); line-height:1.7;}
+
 .about-story{position:relative; padding-top:6px;}
 .about-stars{position:absolute; top:2px; left:0; width:52px; height:52px; opacity:.5; pointer-events:none;}
 .about-title{
