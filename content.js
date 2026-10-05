@@ -214,10 +214,12 @@ export async function attachLikeInfo(db, posts, uid){
 // نحسب PeerPoints مباشرة من البيانات الحقيقية بدل تخزينها كرقم قابل للتعديل:
 // شرح معتمد = 10، إجابة = 5، كل "أفادني" استلمتها على شرح معتمد = 2.
 export async function computeStudentPoints(db, uid){
-  const [myPosts, myAnswers] = await Promise.all([
+  const [myPosts, myAnswers, userSnap] = await Promise.all([
     fetchPostsByStudent(db, uid),
     fetchAnswersByStudent(db, uid),
+    getDoc(doc(db, 'users', uid)).catch(() => null),
   ]);
+  const spaceBonus = (userSnap && userSnap.exists() && userSnap.data().spaceWeekQuizCorrect) ? 5 : 0;
   const approvedPosts = myPosts.filter(p => p.status === 'approved');
   const {counts: likeCountsByPost} = await fetchLikeCountsAndMine(db, approvedPosts.map(p => p.id), null);
   const likesReceived = approvedPosts.reduce((s, p) => s + (likeCountsByPost[p.id] || 0), 0);
@@ -233,7 +235,7 @@ export async function computeStudentPoints(db, uid){
   });
 
   return {
-    points: approvedPosts.length * 10 + myAnswers.length * 5 + likesReceived * 2,
+    points: approvedPosts.length * 10 + myAnswers.length * 5 + likesReceived * 2 + spaceBonus,
     explanationsCount: approvedPosts.length,
     answersCount: myAnswers.length,
     likesReceived,
@@ -249,6 +251,29 @@ export async function fetchAllApprovedPosts(db){
   const q = query(collection(db, 'posts'), where('status', '==', 'approved'));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({id: d.id, ...d.data()}));
+}
+
+/* ================= أسبوع الفضاء: رحلة الاستكشاف (ميزة موسمية) =================
+   أبسط تخزين ممكن: Boolean واحد لكل علامة على ملف الطالبة نفسه، بدل
+   بناء نظام شارات/إنجازات جديد كامل. ================= */
+
+// يُستدعى مرة لما تجاوب صح بالمحطة الأولى، ومرة ثانية لما تكمل الرحلة كاملة
+export async function setSpaceProgress(db, uid, patch){
+  await updateDoc(doc(db, 'users', uid), patch);
+}
+
+export async function shareSpaceFact(db, {uid, studentName, text}){
+  await addDoc(collection(db, 'spaceFacts'), {
+    studentUid: uid, studentName, text: String(text).trim().slice(0, 300),
+    createdAt: serverTimestamp(), createdAtMs: Date.now(),
+  });
+}
+export async function fetchRecentSpaceFacts(db, limitN = 6){
+  const snap = await getDocs(collection(db, 'spaceFacts'));
+  return snap.docs
+    .map(d => ({id: d.id, ...d.data()}))
+    .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0))
+    .slice(0, limitN);
 }
 
 /* ================= صورة الملف الشخصي (Avatar) ================= */
