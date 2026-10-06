@@ -286,7 +286,8 @@ export async function setSpaceProgress(db, uid, patch){
 
 export async function shareSpaceFact(db, {uid, studentName, text}){
   await addDoc(collection(db, 'spaceFacts'), {
-    studentUid: uid, studentName, text: String(text).trim().slice(0, 300),
+    studentUid: uid || null, studentName: String(studentName || 'زائرة').trim().slice(0, 40),
+    text: String(text).trim().slice(0, 300),
     createdAt: serverTimestamp(), createdAtMs: Date.now(),
   });
 }
@@ -296,6 +297,51 @@ export async function fetchRecentSpaceFacts(db, limitN = 6){
     .map(d => ({id: d.id, ...d.data()}))
     .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0))
     .slice(0, limitN);
+}
+
+/* ================= مسابقة أسبوع الفضاء (عامة، بدون تسجيل دخول) =================
+   كتابة على 3 مراحل لضمان إن الزمن محسوب من وقت خادم حقيقي، لا يقدر
+   المستخدم يزوّره: بداية → إنهاء (نتيجة) → ختم الزمن (الفرق بين وقتين
+   حقيقيين مخزَّنين فعلًا). ================= */
+export async function startSpaceQuizAttempt(db, name){
+  const ref = await addDoc(collection(db, 'spaceQuizResults'), {
+    name: String(name).trim().slice(0, 30),
+    status: 'started',
+    startedAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+export async function completeSpaceQuizAttempt(db, id, score){
+  const ref = doc(db, 'spaceQuizResults', id);
+  const before = await getDoc(ref);
+  await updateDoc(ref, {
+    status: 'completed',
+    score, totalQuestions: 10,
+    name: before.data().name, startedAt: before.data().startedAt,
+    completedAt: serverTimestamp(),
+  });
+  // نقرأ المستند مرة ثانية عشان نجيب القيمة المحلولة الحقيقية لـcompletedAt
+  // (serverTimestamp() ما يرجّع القيمة الفعلية وقت الكتابة نفسها).
+  const after = await getDoc(ref);
+  const d = after.data();
+  const completionTime = d.completedAt.toMillis() - d.startedAt.toMillis();
+  await updateDoc(ref, {
+    completionTime,
+    name: d.name, startedAt: d.startedAt, score: d.score,
+    totalQuestions: d.totalQuestions, status: d.status, completedAt: d.completedAt,
+  });
+  return completionTime;
+}
+export async function fetchSpaceQuizLeaderboard(db, limitN = 50){
+  const snap = await getDocs(collection(db, 'spaceQuizResults'));
+  return snap.docs
+    .map(d => ({id: d.id, ...d.data()}))
+    .filter(r => r.status === 'completed' && typeof r.completionTime === 'number')
+    .sort((a, b) => (b.score - a.score) || (a.completionTime - b.completionTime))
+    .slice(0, limitN);
+}
+export async function deleteSpaceQuizResult(db, id){
+  await deleteDoc(doc(db, 'spaceQuizResults', id));
 }
 
 /* ================= صورة الملف الشخصي (Avatar) ================= */
