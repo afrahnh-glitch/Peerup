@@ -599,6 +599,19 @@ input{font-family:inherit;}
   color:var(--primary); background:var(--primary-soft); border-radius:999px; padding:7px 16px;
 }
 .landing-intro-p{font-size:13.5px; color:#1E293B; font-weight:500; line-height:1.9; margin:16px 0 0;}
+.landing-hero-compact{margin-bottom:14px;}
+.landing-intro-p-short{font-size:13px; margin-top:10px;}
+.landing-hero-compact .landing-cta-main{margin-top:12px;}
+
+.landing-teaser-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:16px;
+  text-align:center; margin-bottom:14px; box-shadow:0 8px 20px -16px rgba(23,37,84,.2);
+}
+.landing-teaser-chips{display:flex; justify-content:center; gap:8px; flex-wrap:wrap;}
+.landing-teaser-chip{
+  font-size:12px; font-weight:700; color:var(--primary); background:var(--primary-soft);
+  border-radius:999px; padding:6px 12px;
+}
 
 /* زر الإجراء الرئيسي: تدرّج بنفسجي جذاب + نبضة خفيفة + تفاعل عند التمرير */
 .landing-cta-main{
