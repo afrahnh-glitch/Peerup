@@ -22,6 +22,7 @@ import {
   setAvatar, attachAvatarInfo, fetchAvatarsFor,
   setSpaceProgress, shareSpaceFact, fetchRecentSpaceFacts,
   submitLandingComment, fetchLandingComments, deleteLandingComment,
+  startSpaceQuizAttempt, completeSpaceQuizAttempt, fetchSpaceQuizLeaderboard, deleteSpaceQuizResult,
 } from "./content.js";
 import {
   MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc, mmNodesLabel,
@@ -71,12 +72,61 @@ function icon(name, size = 20){
 const AVATAR_IDS = ['avatar-01', 'avatar-02', 'avatar-03', 'avatar-04', 'avatar-05', 'avatar-06'];
 
 /* ---------- أسبوع الفضاء: محتوى رحلة الاستكشاف (ميزة موسمية) ---------- */
-const SPACE_QUIZ = {
-  q: 'أي كوكب بالمجموعة الشمسية أقرب للشمس؟',
-  options: ['الأرض', 'عطارد', 'الزهرة', 'المريخ'],
-  correct: 1,
-  explain: 'عطارد أقرب كوكب للشمس، ويكمل دورة كاملة حولها خلال 88 يومًا أرضيًا بس.',
-};
+const SPACE_QUIZ_BANK = [
+  {
+    q: 'أي كوكب بالمجموعة الشمسية أقرب للشمس؟',
+    options: ['الأرض', 'عطارد', 'الزهرة', 'المريخ'],
+    correct: 1,
+    explain: 'عطارد أقرب كوكب للشمس، ويكمل دورة كاملة حولها خلال 88 يومًا أرضيًا بس.',
+  },
+  {
+    q: 'أي كوكب أكبر كوكب بالمجموعة الشمسية؟',
+    options: ['الأرض', 'زحل', 'المشتري', 'أورانوس'],
+    correct: 2,
+    explain: 'المشتري أكبر الكواكب بفارق كبير، حجمه يكفي يسع أكثر من 1300 كوكب بحجم الأرض.',
+  },
+  {
+    q: 'كم عدد الكواكب بالمجموعة الشمسية؟',
+    options: ['7', '8', '9', '10'],
+    correct: 1,
+    explain: 'ثمانية كواكب بعد ما استُبعد بلوتو من التصنيف سنة 2006 واعتُبر كوكبًا قزمًا.',
+  },
+  {
+    q: 'أي قوة تخلي الكواكب تدور حول الشمس ومتماسكة بمداراتها؟',
+    options: ['الجاذبية', 'المغناطيسية', 'الاحتكاك', 'الضغط الجوي'],
+    correct: 0,
+    explain: 'جاذبية الشمس الهائلة تحني مسار الكواكب باستمرار، فتضل تدور حولها بدل ما تنفلت بخط مستقيم.',
+  },
+  {
+    q: 'ما اسم المجرة اللي تنتمي لها الأرض والمجموعة الشمسية؟',
+    options: ['درب التبانة', 'المرأة المسلسلة', 'العنقاء', 'الدب الأكبر'],
+    correct: 0,
+    explain: 'درب التبانة مجرّتنا، فيها أكثر من 100 مليار نجم، والشمس وحدة منهم بس.',
+  },
+];
+let SPACE_QUIZ = SPACE_QUIZ_BANK[0];
+/* ---------- مسابقة أسبوع الفضاء: 10 أسئلة ثابتة، متنوعة الصعوبة ---------- */
+const SPACE_COMPETITION_QUESTIONS = [
+  {topic:'النظام الشمسي', q:'كم عدد الكواكب بالمجموعة الشمسية؟', options:['7','8','9','10'], correct:1},
+  {topic:'الكواكب', q:'أي كوكب يُلقّب بـ"الكوكب الأحمر"؟', options:['المشتري','الزهرة','المريخ','زحل'], correct:2},
+  {topic:'النجوم', q:'النجوم تُنتج طاقتها أساسًا عن طريق عملية...؟', options:['الانشطار النووي','الاندماج النووي','الاحتراق الكيميائي','التبخر'], correct:1},
+  {topic:'الشمس', q:'ما حالة المادة الغالبة بالشمس؟', options:['صلبة','سائلة','غازية','بلازما'], correct:3},
+  {topic:'القمر', q:'لماذا نرى دائمًا نفس وجه القمر من الأرض؟', options:['لأن القمر لا يدور حول نفسه إطلاقًا','لأن دورانه حول نفسه يساوي زمن دورانه حول الأرض','لأن الأرض نفسها لا تدور','لأن القمر بعيد جدًا فما يبين فرق'], correct:1},
+  {topic:'الجاذبية', q:'أي وحدة من هذي تقيس "كتلة" الجسم (لا وزنه)؟', options:['نيوتن','كيلوجرام','باسكال','واط'], correct:1},
+  {topic:'الضوء', q:'سرعة الضوء بالفراغ تقارب...؟', options:['300 كم/ث','3,000 كم/ث','300,000 كم/ث','3 مليون كم/ث'], correct:2},
+  {topic:'المجرات', q:'ما اسم أقرب مجرة كبيرة لمجرتنا درب التبانة؟', options:['درب التبانة نفسها','مجرة المرأة المسلسلة (أندروميدا)','سحابة ماجلان الكبرى','العنقاء'], correct:1},
+  {topic:'استكشاف الفضاء', q:'ما اسم أول قمر صناعي يُطلق للفضاء؟', options:['سبوتنيك 1','أبولو 11','فوييجر 1','هابل'], correct:0},
+  {topic:'رواد الفضاء', q:'من أول إنسان مشى على سطح القمر؟', options:['يوري غاغارين','نيل أرمسترونغ','باز ألدرن','جون غلين'], correct:1},
+];
+function shuffleQuizOptions(q){
+  const idx = q.options.map((_, i) => i);
+  for(let i = idx.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  return {...q, options: idx.map(i => q.options[i]), correct: idx.indexOf(q.correct)};
+}
+
 const SPACE_FACTS = [
   'أشعة الشمس تحتاج حوالي 8 دقائق و20 ثانية عشان توصل للأرض.',
   'المريخ فيه أكبر بركان بالمجموعة الشمسية، وارتفاعه يقارب 3 أضعاف ارتفاع إفرست.',
@@ -175,6 +225,15 @@ const state = {
   spaceFactIndex: 0,
   spaceRecentFacts: [],
   landingComments: [],
+  spaceCompName: '',
+  spaceCompAttemptId: null,
+  spaceCompQuestions: [],
+  spaceCompIndex: 0,
+  spaceCompScore: 0,
+  spaceCompAnswered: null,
+  spaceCompDone: false,
+  spaceCompResult: null,
+  spaceCompLeaderboard: [],
   history: [],           // in-app back stack once inside student/teacher screens
 };
 
@@ -662,8 +721,63 @@ async function refreshHomeStats(){
   setState({myStats});
 }
 function openSpaceJourney(){
+  SPACE_QUIZ = SPACE_QUIZ_BANK[Math.floor(Math.random() * SPACE_QUIZ_BANK.length)];
   setState({spaceStation: 1, spaceQuizAnswer: null, spaceFactIndex: 0, spaceRecentFacts: []});
   navigate('spaceJourney');
+}
+function openSpaceQuiz(){
+  setState({
+    spaceCompName: '', spaceCompAttemptId: null, spaceCompQuestions: [],
+    spaceCompIndex: 0, spaceCompScore: 0, spaceCompAnswered: null,
+    spaceCompDone: false, spaceCompResult: null,
+  });
+  navigate('spaceQuiz');
+}
+async function handleStartSpaceQuiz(){
+  const name = document.getElementById('spaceCompNameInput').value.trim();
+  if(name.length < 2 || name.length > 30){ showToast('اكتبي اسمك (بين 2 و30 حرف)'); return; }
+  setState({loading: true});
+  try{
+    const attemptId = await startSpaceQuizAttempt(db, name);
+    const questions = SPACE_COMPETITION_QUESTIONS.map(shuffleQuizOptions);
+    setState({
+      loading: false, spaceCompName: name, spaceCompAttemptId: attemptId,
+      spaceCompQuestions: questions, spaceCompIndex: 0, spaceCompScore: 0, spaceCompAnswered: null,
+    });
+  }catch(err){
+    setState({loading: false});
+    showToast('صار خطأ أثناء البدء، حاولي مرة أخرى.');
+  }
+}
+async function handleAnswerSpaceCompQuiz(i){
+  if(state.spaceCompAnswered !== null) return;
+  const q = state.spaceCompQuestions[state.spaceCompIndex];
+  const correct = i === q.correct;
+  const nextScore = state.spaceCompScore + (correct ? 1 : 0);
+  setState({spaceCompAnswered: i, spaceCompScore: nextScore});
+  setTimeout(async () => {
+    const isLast = state.spaceCompIndex === state.spaceCompQuestions.length - 1;
+    if(!isLast){
+      setState({spaceCompIndex: state.spaceCompIndex + 1, spaceCompAnswered: null});
+      return;
+    }
+    setState({loading: true});
+    try{
+      const completionTime = await completeSpaceQuizAttempt(db, state.spaceCompAttemptId, nextScore);
+      const result = {id: state.spaceCompAttemptId, score: nextScore, completionTime};
+      try{ localStorage.setItem('peerup-space-quiz-result', JSON.stringify(result)); }catch(_e){ /* تجاهل */ }
+      setState({loading: false, spaceCompDone: true, spaceCompResult: result});
+    }catch(err){
+      setState({loading: false});
+      showToast('صار خطأ أثناء حفظ نتيجتك، حاولي مرة أخرى.');
+    }
+  }, 500);
+}
+async function openSpaceQuizLeaderboard(){
+  setState({loading: true});
+  const spaceCompLeaderboard = await fetchSpaceQuizLeaderboard(db, 50).catch(() => []);
+  setState({loading: false});
+  navigate('spaceQuizLeaderboard', {spaceCompLeaderboard});
 }
 async function handleSpaceQuizAnswer(i){
   if(state.spaceQuizAnswer !== null) return;
@@ -692,15 +806,20 @@ function handleSpaceNextFact(){
 async function handleSubmitSpaceFact(){
   const text = document.getElementById('spaceFactInput').value.trim();
   if(!text){ showToast('اكتبي معلومتك قبل المشاركة'); return; }
+  const loggedIn = !!state.profile;
+  let name = loggedIn ? state.profile.displayName : document.getElementById('spaceFactName').value.trim();
+  if(!loggedIn && !name){ showToast('اكتبي اسمك قبل المشاركة'); return; }
   setState({loading: true});
   try{
-    await shareSpaceFact(db, {uid: state.profile.uid, studentName: state.profile.displayName, text});
-    await setSpaceProgress(db, state.profile.uid, {spaceWeekBadge: true});
-    const myStats = await computeStudentPoints(db, state.profile.uid).catch(() => state.myStats);
-    setState({
-      loading: false, myStats, spaceStation: 'done',
-      profile: {...state.profile, spaceWeekBadge: true},
-    });
+    await shareSpaceFact(db, {uid: loggedIn ? state.profile.uid : null, studentName: name, text});
+    if(loggedIn){
+      await setSpaceProgress(db, state.profile.uid, {spaceWeekBadge: true});
+      const myStats = await computeStudentPoints(db, state.profile.uid).catch(() => state.myStats);
+      setState({loading: false, myStats, spaceStation: 'done', profile: {...state.profile, spaceWeekBadge: true}});
+    } else {
+      // زائرة بدون حساب: شكرًا بدون أي نقاط أو شارة مزيّفة ما وراها حساب فعلي
+      setState({loading: false, spaceStation: 'done'});
+    }
   }catch(err){
     setState({loading: false});
     showToast('صار خطأ أثناء المشاركة، حاولي مرة أخرى.');
@@ -912,6 +1031,32 @@ async function openTeacherComments(){
   const landingComments = await fetchLandingComments(db, 100).catch(() => []);
   navigate('teacherComments', {landingComments});
 }
+async function openSpaceQuizAdmin(){
+  const spaceCompLeaderboard = await fetchSpaceQuizLeaderboard(db, 200).catch(() => []);
+  navigate('spaceQuizAdmin', {spaceCompLeaderboard});
+}
+async function handleDeleteSpaceQuizResult(id){
+  try{
+    await deleteSpaceQuizResult(db, id);
+    setState({spaceCompLeaderboard: (state.spaceCompLeaderboard || []).filter(r => r.id !== id)});
+    showToast('تم حذف المشاركة');
+  }catch(err){
+    showToast('صار خطأ أثناء الحذف، تأكدي إنك مسجّلة كمعلمة.');
+  }
+}
+async function handleResetSpaceQuizResults(){
+  const list = state.spaceCompLeaderboard || [];
+  if(!list.length) return;
+  setState({loading: true});
+  try{
+    await Promise.all(list.map(r => deleteSpaceQuizResult(db, r.id)));
+    setState({loading: false, spaceCompLeaderboard: []});
+    showToast('تم حذف كل نتائج المسابقة');
+  }catch(err){
+    setState({loading: false});
+    showToast('صار خطأ أثناء إعادة الضبط، حاولي مرة أخرى.');
+  }
+}
 async function handleDeleteLandingComment(id){
   try{
     await deleteLandingComment(db, id);
@@ -1004,26 +1149,41 @@ function teacherNav(){
 /* ---------- auth views ---------- */
 function viewLanding(){
   const comments = state.landingComments || [];
+  const journeySteps = [
+    {ic:'💡', w:'افهمي'}, {ic:'💬', w:'شاركي'}, {ic:'🆘', w:'اسألي'}, {ic:'🤝', w:'ساعدي'}, {ic:'🚀', w:'ارتقي'},
+  ];
   return `
+  <div class="landing-topbar">
+    <div class="landing-topbar-brand"><img src="images/logo.png" alt="PeerUp"><span>PeerUp</span></div>
+    <button class="landing-topbar-btn" data-action="nav-role-choice">تسجيل الدخول</button>
+  </div>
   <div class="content landing-intro">
-    <div class="landing-hero">
+    <div class="landing-hero" id="landing-top">
       <img src="images/logo.png" class="brand-mark" alt="PeerUp" style="margin-bottom:10px;">
       <div class="bname">PeerUp</div>
       <div class="tag">نرتقي معًا</div>
       <div class="landing-flow-tag">افهمي، ساعدي، ارتقي…</div>
-      <p class="landing-intro-p">منصة تعليمية تشجع الطالبات على مشاركة المعرفة،<br>وطلب المساعدة، ومساعدة الزميلات على الفهم.</p>
+      <p class="landing-intro-p">من طالبة إلى طالبة…<br>المعرفة تنتقل.</p>
+      <a href="#peerup-story" class="btn btn-primary landing-cta-main">استكشفي PeerUp</a>
+    </div>
+
+    <div class="landing-section" id="peerup-story">
+      <h3 class="landing-h3">من فكرة بسيطة… إلى رحلة معرفية</h3>
+      <div class="landing-story-card">
+        <p class="landing-p" style="margin-bottom:10px;">ماذا لو أصبحت معرفة الطالبة وسيلة لمساعدة طالبة أخرى؟</p>
+        <p class="landing-p" style="margin-bottom:0;">في PeerUp لا يقتصر التعلم على أن أفهم أنا،<br>بل يمتد إلى أن أشارك ما فهمته،<br>وأسأل عندما أحتاج المساعدة،<br>وأساعد غيري على الفهم.</p>
+      </div>
     </div>
 
     <div class="landing-section">
-      <h3 class="landing-h3">قصة PeerUp</h3>
-      <p class="landing-p">بدأت PeerUp من فكرة بسيطة:<br>ماذا لو أصبحت معرفة الطالبة وسيلة لمساعدة طالبة أخرى؟</p>
-      <p class="landing-p">في PeerUp لا يقتصر التعلم على أن أفهم أنا،<br>بل يمتد إلى أن أشارك ما فهمته،<br>وأسأل عندما أحتاج المساعدة،<br>وأساعد غيري على الفهم.</p>
-      <div class="about-flow" style="margin-top:16px;">
-        ${['افهمي','شاركي','اسألي','ساعدي','ارتقي'].map((w,i,arr) => `
-          <span class="about-flow-step">${w}</span>${i<arr.length-1 ? '<span class="about-flow-arrow">←</span>' : ''}`).join('')}
-      </div>
-      <div class="landing-closing">
-        <p>كل طالبة تعرف شيئًا…<br>قد تكون سببًا في أن تعرفه طالبة أخرى.</p>
+      <h3 class="landing-h3">رحلة PeerUp</h3>
+      <div class="landing-journey-path">
+        ${journeySteps.map((s,i) => `
+          <div class="landing-journey-step">
+            <div class="landing-journey-ic">${s.ic}</div>
+            <div class="landing-journey-label">${s.w}</div>
+          </div>
+          ${i < journeySteps.length-1 ? '<div class="landing-journey-connector"></div>' : ''}`).join('')}
       </div>
     </div>
 
@@ -1031,15 +1191,23 @@ function viewLanding(){
       <img src="images/planet.svg" class="space-week-planet" alt="" aria-hidden="true">
       <img src="images/stars.svg" class="space-week-stars" alt="" aria-hidden="true">
       <div class="space-week-tag">PeerUp × أسبوع الفضاء</div>
-      <div class="space-week-text">المعرفة رحلة… والفضاء أعظم رحلة.</div>
-      <button class="btn space-week-btn" data-action="nav-space-journey">استكشفي رحلة الفضاء ←</button>
+      <div class="space-week-text">المعرفة رحلة… والفضاء أعظم رحلة.<br>مهمتك تبدأ هنا 🚀</div>
+      <button class="btn space-week-btn" data-action="nav-space-journey">ابدئي المهمة ←</button>
+    </div>
+
+    <div class="space-quiz-card" style="margin-bottom:22px;">
+      <img src="images/stars.svg" class="space-quiz-stars" alt="" aria-hidden="true">
+      <div class="space-quiz-tag">🚀 مسابقة أسبوع الفضاء</div>
+      <div class="space-quiz-text">اختبري معلوماتك عن الفضاء،<br>واجعلي اسمك بين أسرع المستكشفات!</div>
+      <button class="btn space-quiz-btn" data-action="nav-space-quiz">ابدئي المسابقة ←</button>
     </div>
 
     <div class="landing-section">
-      <h3 class="landing-h3">شاركونا رأيكم 💜</h3>
+      <h3 class="landing-h3">صوتك جزء من رحلتنا 💜</h3>
+      <p class="landing-p" style="margin-top:-6px;">ما رأيك في PeerUp؟</p>
       <form id="landingCommentForm" class="landing-comment-form">
         <input type="text" id="commenterName" placeholder="اسمك" maxlength="40">
-        <textarea id="commenterText" placeholder="وش رأيك في PeerUp؟" maxlength="300"></textarea>
+        <textarea id="commenterText" placeholder="اكتبي رأيك في PeerUp..." maxlength="300"></textarea>
         <button type="submit" class="btn btn-primary" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ الإرسال...' : 'إرسال التعليق'}</button>
       </form>
       ${comments.length ? `
@@ -1052,11 +1220,16 @@ function viewLanding(){
       </div>` : ''}
     </div>
 
-    <div class="landing-dev-credit">من تطوير المعلمة أفراح الحربي</div>
+    <div class="landing-footer">
+      <div class="landing-footer-icon">💡</div>
+      <div class="landing-footer-line1">من تطوير</div>
+      <div class="landing-footer-line2">المعلمة أفراح الحربي</div>
+      <div class="landing-footer-year">PeerUp 2026</div>
+    </div>
 
     <div class="landing-section" style="text-align:center;">
       <h3 class="landing-h3">جاهزة للانضمام إلى PeerUp؟</h3>
-      <button class="btn btn-primary" data-action="nav-role-choice">تسجيل الدخول</button>
+      <button class="btn landing-cta-main" data-action="nav-role-choice">✨ تسجيل الدخول</button>
     </div>
   </div>`;
 }
@@ -1124,6 +1297,115 @@ function spaceStationDot(num, label){
   const status = st === 'done' || num < st ? 'done' : (num === st ? 'current' : 'locked');
   return `<div class="journey-dot ${status}"><span class="journey-dot-ic">${status === 'done' ? icon('check', 14) : num}</span><span class="journey-dot-label">${label}</span></div>`;
 }
+function fmtMMSS(ms){
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60), s = total % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function spaceQuizResultMsg(score){
+  if(score === 10) return '🌟 مستكشفة فضاء متميزة!';
+  if(score >= 8) return '🚀 أداء رائع!';
+  if(score >= 6) return '🪐 رحلة جميلة!';
+  return '🌌 استكشفي أكثر… الرحلة لم تنتهِ!';
+}
+function viewSpaceQuiz(){
+  // زائرة سبق شاركت من نفس الجهاز
+  let prior = null;
+  try{ prior = JSON.parse(localStorage.getItem('peerup-space-quiz-result') || 'null'); }catch(_e){ /* تجاهل */ }
+  if(prior && !state.spaceCompDone){
+    return `
+    <div class="content-app space-journey-bg">
+      <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
+      ${pageHead('🌌 مسابقة أسبوع الفضاء')}
+      <div class="journey-complete">
+        <img src="images/rocket.svg" class="journey-complete-rocket" alt="">
+        <h2>أنتِ ضمن قائمة المستكشفات 🚀</h2>
+        <p>سبق لك المشاركة في هذه المسابقة من هذا الجهاز.</p>
+        <div class="points-big">${prior.score} / 10</div>
+        <p style="margin-top:-6px;">الزمن: ${fmtMMSS(prior.completionTime)}</p>
+        <button class="btn btn-primary" style="margin-top:14px;" data-action="nav-space-quiz-leaderboard">🏆 عرض لوحة المتصدرين</button>
+        <button class="btn" style="margin-top:10px; background:rgba(255,255,255,.14); color:#fff;" data-action="back-to-landing-intro">العودة إلى PeerUp</button>
+      </div>
+    </div>`;
+  }
+
+  if(state.spaceCompDone){
+    const r = state.spaceCompResult || {score:0, completionTime:0};
+    return `
+    <div class="content-app space-journey-bg">
+      <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
+      ${pageHead('🌌 مسابقة أسبوع الفضاء')}
+      <div class="journey-complete">
+        <img src="images/rocket.svg" class="journey-complete-rocket" alt="">
+        <h2>🚀 انتهت رحلتك!</h2>
+        <p>أحسنتِ يا ${mmEsc(state.spaceCompName)}</p>
+        <div class="points-big">${r.score} / 10</div>
+        <p style="margin-top:-6px;">الزمن: ${fmtMMSS(r.completionTime)}</p>
+        <p style="font-weight:700; color:#fff; margin-top:4px;">${spaceQuizResultMsg(r.score)}</p>
+        <button class="btn btn-primary" style="margin-top:16px;" data-action="nav-space-quiz-leaderboard">🏆 شاهدي لوحة المتصدرين</button>
+        <button class="btn" style="margin-top:10px; background:rgba(255,255,255,.14); color:#fff;" data-action="back-to-landing-intro">العودة إلى PeerUp</button>
+      </div>
+    </div>`;
+  }
+
+  if(!state.spaceCompAttemptId){
+    return `
+    <div class="content-app space-journey-bg">
+      <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
+      ${pageHead('🌌 مسابقة أسبوع الفضاء', '10 أسئلة… 10 فرص لتثبتي معرفتك بالفضاء.')}
+      <div class="journey-station">
+        <h3 class="journey-station-title">اكتبي اسمك</h3>
+        <input type="text" id="spaceCompNameInput" class="journey-share-input" placeholder="اسم المشاركة" maxlength="30">
+        <button class="btn btn-primary" data-action="start-space-quiz" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ البدء...' : 'ابدئي الرحلة 🚀'}</button>
+      </div>
+    </div>`;
+  }
+
+  const q = state.spaceCompQuestions[state.spaceCompIndex];
+  const answered = state.spaceCompAnswered !== null;
+  const dots = state.spaceCompQuestions.map((_, i) => i < state.spaceCompIndex ? '●' : (i === state.spaceCompIndex ? '●' : '○')).join('');
+  return `
+  <div class="content-app space-journey-bg">
+    <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
+    ${pageHead('🌌 مسابقة أسبوع الفضاء')}
+    <div class="quiz-progress-head">
+      <div class="quiz-progress-label">السؤال ${state.spaceCompIndex + 1} من ${state.spaceCompQuestions.length}</div>
+      <div class="quiz-progress-dots">${dots}</div>
+    </div>
+    <div class="quiz-card">
+      <div class="quiz-q">${mmEsc(q.q)}</div>
+      ${q.options.map((opt, i) => `
+        <button class="quiz-opt ${answered && i===state.spaceCompAnswered ? 'selected-pending' : ''}" data-action="answer-space-comp-quiz" data-i="${i}" ${answered ? 'disabled' : ''}>${mmEsc(opt)}</button>`).join('')}
+    </div>
+  </div>`;
+}
+
+function viewSpaceQuizLeaderboard(){
+  const list = state.spaceCompLeaderboard || [];
+  let myResult = null;
+  try{ myResult = JSON.parse(localStorage.getItem('peerup-space-quiz-result') || 'null'); }catch(_e){ /* تجاهل */ }
+  const medal = (i) => i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : '';
+  return `
+  <div class="content-app space-journey-bg">
+    <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
+    ${pageHead('🏆 لوحة مستكشفات الفضاء')}
+    ${list.length ? `
+    <div class="leaderboard-list">
+      ${list.map((r, i) => {
+        const isMe = myResult && myResult.id === r.id;
+        return `
+        <div class="leaderboard-row ${isMe ? 'is-me' : ''}">
+          <div class="lb-rank">${medal(i) || '#'+(i+1)}</div>
+          <div class="lb-name">${isMe ? '✨ أنتِ — ' : ''}${mmEsc(r.name)}</div>
+          <div class="lb-score">${r.score}/10</div>
+          <div class="lb-time">${fmtMMSS(r.completionTime)}</div>
+        </div>`;
+      }).join('')}
+    </div>` : `<div class="empty-state"><span class="emoji">🚀</span>ولا مستكشفة شاركت لين الحين.</div>`}
+    <button class="btn" style="margin-top:18px; background:rgba(255,255,255,.14); color:#fff;" data-action="back-to-landing-intro">العودة إلى PeerUp</button>
+  </div>`;
+}
+
 function viewSpaceJourney(){
   return `
   <div class="content-app space-journey-bg">
@@ -1182,31 +1464,32 @@ function spaceStation3Html(){
   <div class="journey-station">
     <h3 class="journey-station-title">🚀 شاركي</h3>
     <p class="journey-station-desc">اكتبي معلومة أو حقيقة فضائية تعرفينها وشاركي معرفتك مع زميلاتك.</p>
-    ${loggedIn ? `
+    ${!loggedIn ? '<input type="text" id="spaceFactName" class="journey-share-input" placeholder="اسمك" maxlength="40" style="min-height:unset; margin-bottom:10px;">' : ''}
     <textarea id="spaceFactInput" class="journey-share-input" placeholder="اكتبي معلومتك الفضائية هنا..."></textarea>
-    <button class="btn btn-primary" data-action="submit-space-fact" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ المشاركة...' : 'شاركي معرفتك'}</button>` : `
-    <div class="journey-visitor-note">
-      <p>سجّلي دخولك عشان تضيفين معلومتك وتُحفظ مشاركتك باسمك.</p>
-      <button class="btn btn-primary" data-action="nav-role-choice">تسجيل الدخول</button>
-    </div>`}
+    <button class="btn btn-primary" data-action="submit-space-fact" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ المشاركة...' : 'شاركي معرفتك'}</button>
     ${state.spaceRecentFacts.length ? `
     <div class="section-title" style="margin-top:24px;">معلومات شاركتها زميلاتك</div>
     ${state.spaceRecentFacts.map(f => `<div class="fact-mini"><b>${mmEsc(f.studentName)}:</b> ${mmEsc(f.text)}</div>`).join('')}` : ''}
   </div>`;
 }
 function spaceJourneyCompleteHtml(){
+  const loggedIn = !!state.profile;
   const s = state.myStats || {points: 0};
   return `
   <div class="journey-complete">
     <img src="images/rocket.svg" class="journey-complete-rocket" alt="">
     <h2>أتممتِ المهمة!</h2>
     <p>المعرفة رحلة… وكل مشاركة تقرّبنا من النجوم.</p>
+    ${loggedIn ? `
     <div class="points-big">${s.points} PeerPoints</div>
     <div class="badge-earned-card" style="margin:18px auto 0; max-width:260px;">
       <img src="images/planet.svg" class="badge-earned-icon" alt="" aria-hidden="true">
       <div><div class="badge-earned-title">مستكشفة PeerUp</div><div class="badge-earned-sub">تم الحصول عليها</div></div>
     </div>
-    <button class="btn btn-primary" style="margin-top:20px;" data-action="nav-student-home">رجوع للرئيسية</button>
+    <button class="btn btn-primary" style="margin-top:20px;" data-action="nav-student-home">رجوع للرئيسية</button>` : `
+    <p style="margin-top:4px;">سجّلي دخولك المرة الجاية عشان تُحفظ نقاطك وتحصلين على شارة «مستكشفة PeerUp».</p>
+    <button class="btn btn-primary" style="margin-top:14px;" data-action="nav-role-choice">تسجيل الدخول</button>
+    <button class="btn" style="margin-top:10px; background:var(--surface); border:1.5px solid var(--border); color:var(--ink);" data-action="back-to-landing-intro">رجوع لصفحة البداية</button>`}
   </div>`;
 }
 
@@ -1290,6 +1573,13 @@ function viewStudentHome(){
         <div class="space-week-tag">أسبوع الفضاء مع PeerUp</div>
         <div class="space-week-text">لأن المعرفة رحلة… والفضاء أعظم رحلة.</div>
         <button class="btn space-week-btn" data-action="nav-space-journey">ابدئي رحلة الاستكشاف ←</button>
+      </div>
+
+      <div class="space-quiz-card">
+        <img src="images/stars.svg" class="space-quiz-stars" alt="" aria-hidden="true">
+        <div class="space-quiz-tag">🚀 مسابقة أسبوع الفضاء</div>
+        <div class="space-quiz-text">اختبري معلوماتك عن الفضاء،<br>واجعلي اسمك بين أسرع المستكشفات!</div>
+        <button class="btn space-quiz-btn" data-action="nav-space-quiz">ابدئي المسابقة ←</button>
       </div>
 
       ${lessons.length ? `
@@ -1755,6 +2045,11 @@ function viewTeacherHome(){
       <div><div class="r-title">تعليقات الزوار</div><div class="r-sub">راجعي آراء الزوار وأخفي غير المناسب</div></div>
       <span class="chev">←</span>
     </button>
+    <button class="role-card" data-action="nav-space-quiz-admin" style="margin-top:4px;">
+      <div class="badge" style="background:var(--primary-soft); color:var(--primary);">🚀</div>
+      <div><div class="r-title">نتائج مسابقة الفضاء</div><div class="r-sub">راجعي النتائج واحذفي أي مشاركة غير مناسبة</div></div>
+      <span class="chev">←</span>
+    </button>
     <div class="section-title">🔥 تحدي اليوم</div>
     <form id="challengeForm" class="challenge-edit-card">
       <textarea id="challengeInput" placeholder="مثال: اشرحي في 60 ثانية: لماذا لا يسقط برج بيزا؟">${state.challenge && state.challenge.text ? state.challenge.text : ''}</textarea>
@@ -1812,6 +2107,26 @@ function pendingPostCard(p){
       <button class="btn" style="width:auto; flex:1; background:var(--surface); border:1.5px solid var(--border); color:var(--ink);" data-action="reject-post" data-id="${p.id}">${icon('close',17)} رفض</button>
       <button class="btn" style="width:auto; padding:0 14px; background:var(--danger-soft); color:var(--danger);" data-action="delete-post" data-id="${p.id}">${icon('trash',17)}</button>
     </div>
+  </div>`;
+}
+
+function viewSpaceQuizAdmin(){
+  const results = state.spaceCompLeaderboard || [];
+  return `
+  <div class="content-app">
+    <div class="page-head" style="padding-top:2px;">
+      <div><h2>🚀 نتائج مسابقة الفضاء</h2><div class="p-sub">${results.length} مشاركة</div></div>
+    </div>
+    ${results.length ? `
+    <button class="btn" style="width:auto; padding:9px 16px; margin-bottom:14px; background:var(--danger-soft); color:var(--danger); font-size:12.5px;" data-action="reset-space-quiz-results">إعادة ضبط كل النتائج</button>
+    ${results.map(r => `
+      <div class="post-card">
+        <div class="p-head">
+          <div style="flex:1;"><div class="p-who">${mmEsc(r.name)}</div><div class="p-meta">${r.score}/10 · ${fmtMMSS(r.completionTime)}</div></div>
+          <button class="btn" style="width:auto; padding:0 12px; background:var(--danger-soft); color:var(--danger);" data-action="delete-space-quiz-result" data-id="${r.id}">${icon('trash',16)}</button>
+        </div>
+      </div>`).join('')}` : `
+      <div class="empty-state"><span class="emoji">🚀</span>ولا مشاركة وصلت بعد.</div>`}
   </div>`;
 }
 
@@ -1913,11 +2228,14 @@ function render(){
   if(state.view === 'savedPosts'){ app.innerHTML = viewSavedPosts() + studentNav(); return; }
   if(state.view === 'aboutStory'){ app.innerHTML = viewAboutStory() + studentNav(); return; }
   if(state.view === 'spaceJourney'){ app.innerHTML = viewSpaceJourney() + (state.profile ? studentNav() : ''); return; }
+  if(state.view === 'spaceQuiz'){ app.innerHTML = viewSpaceQuiz() + (state.profile ? studentNav() : ''); return; }
+  if(state.view === 'spaceQuizLeaderboard'){ app.innerHTML = viewSpaceQuizLeaderboard() + (state.profile ? studentNav() : ''); return; }
   if(state.view === 'studentsList'){ app.innerHTML = viewStudentsList() + studentNav(); return; }
   if(state.view === 'studentProfile'){ app.innerHTML = viewStudentProfile() + studentNav(); return; }
   if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
   if(state.view === 'teacherReview'){ app.innerHTML = viewTeacherReview() + teacherNav(); return; }
   if(state.view === 'teacherComments'){ app.innerHTML = viewTeacherComments() + teacherNav(); return; }
+  if(state.view === 'spaceQuizAdmin'){ app.innerHTML = viewSpaceQuizAdmin() + teacherNav(); return; }
   if(state.view === 'teacherStats'){ app.innerHTML = viewTeacherStats() + teacherNav(); return; }
   app.innerHTML = viewLanding();
 }
@@ -2000,6 +2318,12 @@ document.addEventListener('click', (e) => {
     openTeacherComments();
   } else if(action === 'delete-landing-comment'){
     handleDeleteLandingComment(el.dataset.id);
+  } else if(action === 'nav-space-quiz-admin'){
+    openSpaceQuizAdmin();
+  } else if(action === 'delete-space-quiz-result'){
+    handleDeleteSpaceQuizResult(el.dataset.id);
+  } else if(action === 'reset-space-quiz-results'){
+    handleResetSpaceQuizResults();
   } else if(action === 'nav-teacher-stats'){
     openTeacherStats();
   } else if(action === 'approve-post'){
@@ -2066,6 +2390,14 @@ document.addEventListener('click', (e) => {
     navigate('aboutStory');
   } else if(action === 'nav-space-journey'){
     openSpaceJourney();
+  } else if(action === 'nav-space-quiz'){
+    openSpaceQuiz();
+  } else if(action === 'start-space-quiz'){
+    handleStartSpaceQuiz();
+  } else if(action === 'answer-space-comp-quiz'){
+    handleAnswerSpaceCompQuiz(Number(el.dataset.i));
+  } else if(action === 'nav-space-quiz-leaderboard'){
+    openSpaceQuizLeaderboard();
   } else if(action === 'answer-space-quiz'){
     handleSpaceQuizAnswer(Number(el.dataset.i));
   } else if(action === 'space-next-station'){
