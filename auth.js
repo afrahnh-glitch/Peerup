@@ -225,6 +225,7 @@ const state = {
   spaceFactIndex: 0,
   spaceRecentFacts: [],
   landingComments: [],
+  showLandingComments: false,
   spaceCompName: '',
   spaceCompAttemptId: null,
   spaceCompQuestions: [],
@@ -1149,75 +1150,65 @@ function teacherNav(){
 /* ---------- auth views ---------- */
 function viewLanding(){
   const comments = state.landingComments || [];
-  const journeySteps = [
-    {ic:'💡', w:'افهمي'}, {ic:'💬', w:'شاركي'}, {ic:'🆘', w:'اسألي'}, {ic:'🤝', w:'ساعدي'}, {ic:'🚀', w:'ارتقي'},
-  ];
   return `
   <div class="landing-topbar">
     <div class="landing-topbar-brand"><img src="images/logo.png" alt="PeerUp"><span>PeerUp</span></div>
     <button class="landing-topbar-btn" data-action="nav-role-choice">تسجيل الدخول</button>
   </div>
   <div class="content landing-intro">
-    <div class="landing-hero" id="landing-top">
-      <img src="images/logo.png" class="brand-mark" alt="PeerUp" style="margin-bottom:10px;">
+    <div class="landing-hero landing-hero-compact" id="landing-top">
+      <img src="images/logo.png" class="brand-mark" alt="PeerUp" style="margin-bottom:8px;">
       <div class="bname">PeerUp</div>
       <div class="tag">نرتقي معًا</div>
       <div class="landing-flow-tag">افهمي، ساعدي، ارتقي…</div>
-      <p class="landing-intro-p">من طالبة إلى طالبة…<br>المعرفة تنتقل.</p>
-      <a href="#peerup-story" class="btn btn-primary landing-cta-main">استكشفي PeerUp</a>
+      <p class="landing-intro-p landing-intro-p-short">منصة التعلم التشاركي في الفيزياء</p>
+      <a href="#space-week-section" class="btn btn-primary landing-cta-main">استكشفي PeerUp</a>
     </div>
 
-    <div class="landing-section" id="peerup-story">
-      <h3 class="landing-h3">من فكرة بسيطة… إلى رحلة معرفية</h3>
-      <div class="landing-story-card">
-        <p class="landing-p" style="margin-bottom:10px;">ماذا لو أصبحت معرفة الطالبة وسيلة لمساعدة طالبة أخرى؟</p>
-        <p class="landing-p" style="margin-bottom:0;">في PeerUp لا يقتصر التعلم على أن أفهم أنا،<br>بل يمتد إلى أن أشارك ما فهمته،<br>وأسأل عندما أحتاج المساعدة،<br>وأساعد غيري على الفهم.</p>
-      </div>
-    </div>
-
-    <div class="landing-section">
-      <h3 class="landing-h3">رحلة PeerUp</h3>
-      <div class="landing-journey-path">
-        ${journeySteps.map((s,i) => `
-          <div class="landing-journey-step">
-            <div class="landing-journey-ic">${s.ic}</div>
-            <div class="landing-journey-label">${s.w}</div>
-          </div>
-          ${i < journeySteps.length-1 ? '<div class="landing-journey-connector"></div>' : ''}`).join('')}
-      </div>
-    </div>
-
-    <div class="space-week-card" style="margin:22px 0;">
+    <div id="space-week-section"></div>
+    <div class="space-week-card" style="margin:18px 0 12px;">
       <img src="images/planet.svg" class="space-week-planet" alt="" aria-hidden="true">
       <img src="images/stars.svg" class="space-week-stars" alt="" aria-hidden="true">
-      <div class="space-week-tag">PeerUp × أسبوع الفضاء</div>
-      <div class="space-week-text">المعرفة رحلة… والفضاء أعظم رحلة.<br>مهمتك تبدأ هنا 🚀</div>
+      <div class="space-week-tag">🌌 أسبوع الفضاء مع PeerUp</div>
+      <div class="space-week-text">المعرفة رحلة… والفضاء أعظم رحلة.</div>
       <button class="btn space-week-btn" data-action="nav-space-journey">ابدئي المهمة ←</button>
     </div>
 
-    <div class="space-quiz-card" style="margin-bottom:22px;">
+    <div class="space-quiz-card" style="margin-bottom:18px;">
       <img src="images/stars.svg" class="space-quiz-stars" alt="" aria-hidden="true">
       <div class="space-quiz-tag">🚀 مسابقة أسبوع الفضاء</div>
-      <div class="space-quiz-text">اختبري معلوماتك عن الفضاء،<br>واجعلي اسمك بين أسرع المستكشفات!</div>
-      <button class="btn space-quiz-btn" data-action="nav-space-quiz">ابدئي المسابقة ←</button>
+      <div class="space-quiz-text">10 أسئلة عن الفضاء<br>هل تستطيعين الوصول إلى القمة؟</div>
+      <button class="btn space-quiz-btn" data-action="nav-space-quiz">ابدئي المسابقة</button>
+    </div>
+
+    <div class="landing-teaser-card">
+      <h3 class="landing-h3" style="margin-bottom:8px;">من فكرة بسيطة… إلى رحلة معرفية</h3>
+      <p class="landing-p" style="margin-bottom:14px;">PeerUp تجمع بين التطوع والفيزياء والبرمجة في تجربة واحدة.</p>
+      <div class="landing-teaser-chips">
+        <span class="landing-teaser-chip">🤝 التطوع</span>
+        <span class="landing-teaser-chip">⚛️ الفيزياء</span>
+        <span class="landing-teaser-chip">💻 البرمجة</span>
+      </div>
+      <button class="link-btn" style="margin-top:14px;" data-action="nav-about-story">اكتشفي قصة PeerUp ←</button>
     </div>
 
     <div class="landing-section">
-      <h3 class="landing-h3">صوتك جزء من رحلتنا 💜</h3>
-      <p class="landing-p" style="margin-top:-6px;">ما رأيك في PeerUp؟</p>
+      <h3 class="landing-h3" style="margin-bottom:2px;">صوتك جزء من رحلتنا 💜</h3>
+      <p class="landing-p" style="margin-top:0; margin-bottom:12px;">ما رأيك في PeerUp؟</p>
       <form id="landingCommentForm" class="landing-comment-form">
         <input type="text" id="commenterName" placeholder="اسمك" maxlength="40">
         <textarea id="commenterText" placeholder="اكتبي رأيك في PeerUp..." maxlength="300"></textarea>
         <button type="submit" class="btn btn-primary" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ الإرسال...' : 'إرسال التعليق'}</button>
       </form>
-      ${comments.length ? `
+      ${comments.length ? (state.showLandingComments ? `
       <div class="landing-comments-rail">
         ${comments.map(c => `
           <div class="landing-comment-card">
             <div class="landing-comment-name">${mmEsc(c.name)}</div>
             <div class="landing-comment-text">${mmEsc(c.text)}</div>
           </div>`).join('')}
-      </div>` : ''}
+      </div>` : `
+      <button type="button" class="link-btn" data-action="toggle-landing-comments">شاهدِي آراء المشاركات (${comments.length})</button>`) : ''}
     </div>
 
     <div class="landing-footer">
@@ -1498,9 +1489,11 @@ function viewAboutStory(){
   <div class="content-app about-story">
     ${pageHead('قصة PeerUp')}
     <img src="images/stars.svg" class="about-stars" alt="" aria-hidden="true">
-    <h2 class="about-title">من فكرة تطوعية إلى رحلة معرفية</h2>
+    <h2 class="about-title">من فكرة بسيطة… إلى رحلة معرفية</h2>
     <p class="about-p">بدأت PeerUp من فكرة بسيطة:<br>ماذا لو أصبحت معرفة الطالبة وسيلة لمساعدة طالبة أخرى؟</p>
+    <p class="about-p">في PeerUp لا يقتصر التعلم على أن أفهم أنا،<br>بل يمتد إلى أن أشارك ما فهمته،<br>وأسأل عندما أحتاج المساعدة،<br>وأساعد غيري على الفهم.</p>
 
+    <h3 class="about-h3" style="margin-top:4px;">رحلة PeerUp</h3>
     <div class="about-flow">
       ${['افهمي','شاركي','اسألي','ساعدي','ارتقي'].map((w,i,arr) => `
         <span class="about-flow-step">${w}</span>${i<arr.length-1 ? '<span class="about-flow-arrow">←</span>' : ''}`).join('')}
@@ -2226,7 +2219,7 @@ function render(){
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
   if(state.view === 'achievements'){ app.innerHTML = viewAchievements() + studentNav(); return; }
   if(state.view === 'savedPosts'){ app.innerHTML = viewSavedPosts() + studentNav(); return; }
-  if(state.view === 'aboutStory'){ app.innerHTML = viewAboutStory() + studentNav(); return; }
+  if(state.view === 'aboutStory'){ app.innerHTML = viewAboutStory() + (state.profile ? studentNav() : ''); return; }
   if(state.view === 'spaceJourney'){ app.innerHTML = viewSpaceJourney() + (state.profile ? studentNav() : ''); return; }
   if(state.view === 'spaceQuiz'){ app.innerHTML = viewSpaceQuiz() + (state.profile ? studentNav() : ''); return; }
   if(state.view === 'spaceQuizLeaderboard'){ app.innerHTML = viewSpaceQuizLeaderboard() + (state.profile ? studentNav() : ''); return; }
@@ -2388,6 +2381,8 @@ document.addEventListener('click', (e) => {
     openSavedPosts();
   } else if(action === 'nav-about-story'){
     navigate('aboutStory');
+  } else if(action === 'toggle-landing-comments'){
+    setState({showLandingComments: true});
   } else if(action === 'nav-space-journey'){
     openSpaceJourney();
   } else if(action === 'nav-space-quiz'){
