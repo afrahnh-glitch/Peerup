@@ -578,12 +578,14 @@ input{font-family:inherit;}
 /* شريط علوي بسيط: الشعار + زر دخول صغير، يغني الطالبة اللي تعرف المنصة
    عن النزول لآخر الصفحة */
 .landing-topbar{
-  position:sticky; top:0; z-index:40; display:flex; align-items:center; justify-content:space-between;
-  padding:calc(10px + env(safe-area-inset-top, 0px)) 18px 10px; background:var(--bg); border-bottom:1px solid var(--border);
+  position:sticky; top:0; z-index:40; display:flex; flex-direction:row; align-items:center; justify-content:space-between;
+  width:100%; box-sizing:border-box; direction:rtl;
+  padding:calc(12px + env(safe-area-inset-top, 0px)) 18px 12px; background:var(--bg); border-bottom:1px solid var(--border);
+  box-shadow:0 2px 10px rgba(23,32,51,.06);
 }
 .landing-topbar-brand{display:flex; align-items:center; gap:7px;}
 .landing-topbar-brand img{width:24px; height:24px;}
-.landing-topbar-brand span{font-family:'El Messiri'; font-weight:700; font-size:14px; color:var(--ink);}
+.landing-topbar-brand span{font-family:'El Messiri'; font-weight:700; font-size:16px; color:var(--ink);}
 .landing-topbar-btn{
   background:var(--primary-soft); color:var(--primary); font-weight:700; font-size:12px;
   border-radius:999px; padding:8px 16px; flex-shrink:0;
@@ -600,7 +602,10 @@ input{font-family:inherit;}
 }
 .landing-intro-p{font-size:13.5px; color:#1E293B; font-weight:500; line-height:1.9; margin:16px 0 0;}
 .landing-hero-compact{margin-bottom:14px;}
-.landing-intro-p-short{font-size:13px; margin-top:10px;}
+.landing-intro-p-short{font-size:16px; font-weight:600; margin-top:10px;}
+.link-btn.landing-story-link{color:var(--primary); font-size:14px; font-weight:700; text-decoration:none; opacity:1;}
+.link-btn.landing-story-link:hover{text-decoration:underline;}
+.landing-field-label{font-size:12.5px; font-weight:700; color:var(--ink); margin:0 2px -4px; display:block;}
 .landing-hero-compact .landing-cta-main{margin-top:12px;}
 
 .landing-teaser-card{
