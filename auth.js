@@ -1151,10 +1151,10 @@ function teacherNav(){
 function viewLanding(){
   const comments = state.landingComments || [];
   return `
-  <div class="landing-topbar">
+  <header class="landing-topbar" dir="rtl">
     <div class="landing-topbar-brand"><img src="images/logo.png" alt="PeerUp"><span>PeerUp</span></div>
     <button class="landing-topbar-btn" data-action="nav-role-choice">تسجيل الدخول</button>
-  </div>
+  </header>
   <div class="content landing-intro">
     <div class="landing-hero landing-hero-compact" id="landing-top">
       <img src="images/logo.png" class="brand-mark" alt="PeerUp" style="margin-bottom:8px;">
@@ -1170,7 +1170,7 @@ function viewLanding(){
       <img src="images/planet.svg" class="space-week-planet" alt="" aria-hidden="true">
       <img src="images/stars.svg" class="space-week-stars" alt="" aria-hidden="true">
       <div class="space-week-tag">🌌 أسبوع الفضاء مع PeerUp</div>
-      <div class="space-week-text">المعرفة رحلة… والفضاء أعظم رحلة.</div>
+      <div class="space-week-text">كونٌ من المعرفة بانتظارك.. هل أنتِ مستعدة للانطلاق؟</div>
       <button class="btn space-week-btn" data-action="nav-space-journey">ابدئي المهمة ←</button>
     </div>
 
@@ -1189,14 +1189,16 @@ function viewLanding(){
         <span class="landing-teaser-chip">⚛️ الفيزياء</span>
         <span class="landing-teaser-chip">💻 البرمجة</span>
       </div>
-      <button class="link-btn" style="margin-top:14px;" data-action="nav-about-story">اكتشفي قصة PeerUp ←</button>
+      <button class="link-btn landing-story-link" style="margin-top:14px;" data-action="nav-about-story">اكتشفي قصة PeerUp ←</button>
     </div>
 
     <div class="landing-section">
       <h3 class="landing-h3" style="margin-bottom:2px;">صوتك جزء من رحلتنا 💜</h3>
       <p class="landing-p" style="margin-top:0; margin-bottom:12px;">ما رأيك في PeerUp؟</p>
       <form id="landingCommentForm" class="landing-comment-form">
+        <label class="landing-field-label" for="commenterName">الاسم</label>
         <input type="text" id="commenterName" placeholder="اسمك" maxlength="40">
+        <label class="landing-field-label" for="commenterText">الرأي أو التعليق</label>
         <textarea id="commenterText" placeholder="اكتبي رأيك في PeerUp..." maxlength="300"></textarea>
         <button type="submit" class="btn btn-primary" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ الإرسال...' : 'إرسال التعليق'}</button>
       </form>
@@ -1556,7 +1558,7 @@ function viewStudentHome(){
       <div class="challenge-card">
         <img src="images/rocket.svg" class="challenge-rocket" alt="" aria-hidden="true">
         <div class="challenge-tag">🔥 تحدي اليوم</div>
-        <div class="challenge-text">${state.challenge.text}</div>
+        <div class="challenge-text">${mmEsc(state.challenge.text)}</div>
         <button class="btn challenge-btn" data-action="nav-challenge-share">أشارك بالتحدي ←</button>
       </div>` : ''}
 
@@ -1581,7 +1583,7 @@ function viewStudentHome(){
         ${lessons.map((l, i) => `
           <button class="lesson-row" data-action="nav-lesson" data-id="${l.id}">
             <div class="lesson-ic">${i + 1}</div>
-            <div class="lesson-mid"><div class="lesson-title">${l.title}</div></div>
+            <div class="lesson-mid"><div class="lesson-title">${mmEsc(l.title)}</div></div>
             <span class="chev">←</span>
           </button>`).join('')}
       </div>` : `
@@ -1616,7 +1618,7 @@ function viewSubjectLessons(){
         ${lessons.map((l, i) => `
           <button class="lesson-row" data-action="nav-lesson" data-id="${l.id}">
             <div class="lesson-ic">${i + 1}</div>
-            <div class="lesson-mid"><div class="lesson-title">${l.title}</div></div>
+            <div class="lesson-mid"><div class="lesson-title">${mmEsc(l.title)}</div></div>
             <span class="chev">←</span>
           </button>`).join('')}
       </div>` : `
@@ -1671,13 +1673,13 @@ function postCard(p){
     <div class="p-head">
       ${avatarHtml(p, 38)}
       <div style="flex:1;">
-        <div class="p-who">${p.studentName}${isMine ? ' (أنتِ)' : ''}</div>
-        ${(state.view==='savedPosts' || p._searchResult) ? `<div class="p-meta">${lessonTitleById(p.lessonId)}</div>` : (t ? `<div class="p-meta">${t.label}</div>` : '')}
+        <div class="p-who">${mmEsc(p.studentName)}${isMine ? ' (أنتِ)' : ''}</div>
+        ${(state.view==='savedPosts' || p._searchResult) ? `<div class="p-meta">${mmEsc(lessonTitleById(p.lessonId))}</div>` : (t ? `<div class="p-meta">${t.label}</div>` : '')}
       </div>
       ${pending ? `<span class="pending-tag">⏳ بانتظار الاعتماد</span>` : ''}
     </div>
-    ${p.title ? `<div class="p-title">${p.title}</div>` : ''}
-    <div class="p-body">${p.content}</div>
+    ${p.title ? `<div class="p-title">${mmEsc(p.title)}</div>` : ''}
+    <div class="p-body">${mmEsc(p.content)}</div>
     ${p.imageUrl ? `<img src="${p.imageUrl}" class="post-image" alt="صورة الشرح" loading="lazy">` : ''}
     ${p.voiceNote && p.voiceNote.dataUrl ? `<audio controls src="${p.voiceNote.dataUrl}" class="post-audio"></audio>` : ''}
     ${mindMapBlock(p)}
@@ -1698,13 +1700,13 @@ function questionCard(q){
   const showLessonTag = state.view === 'questionsList';
   return `
   <div class="post-card">
-    <div style="font-weight:700; color:var(--ink); margin-bottom:6px; font-size:14px;">${q.text}</div>
-    <div class="p-meta q-asker" style="margin-bottom:8px;">${avatarHtml(q,20)} سألتها ${q.studentName}${showLessonTag ? ' · ' + lessonTitleById(q.lessonId) : ''}</div>
+    <div style="font-weight:700; color:var(--ink); margin-bottom:6px; font-size:14px;">${mmEsc(q.text)}</div>
+    <div class="p-meta q-asker" style="margin-bottom:8px;">${avatarHtml(q,20)} سألتها ${mmEsc(q.studentName)}${showLessonTag ? ' · ' + mmEsc(lessonTitleById(q.lessonId)) : ''}</div>
     <button class="link-btn" style="margin:0; text-align:right;" data-action="toggle-question" data-id="${q.id}">
       ${q.answers.length ? `💬 ${q.answers.length} إجابة${q.answers.length>1?'ات':''} — ${expanded?'إخفاء':'عرض'}` : (expanded ? 'إخفاء نموذج الإجابة' : '✍️ كوني أول من تجاوب')}
     </button>
     ${expanded ? `
-      ${q.answers.map(a => `<div class="answer-line">${avatarHtml(a,18)} <b>${a.studentName}:</b> ${a.text}</div>`).join('')}
+      ${q.answers.map(a => `<div class="answer-line">${avatarHtml(a,18)} <b>${mmEsc(a.studentName)}:</b> ${mmEsc(a.text)}</div>`).join('')}
       <form class="answer-form" data-answer-for="${q.id}">
         <input type="text" placeholder="اكتبي إجابتك..." required>
         <button type="submit">إرسال</button>
@@ -1740,7 +1742,7 @@ function viewSharePost(){
     <div class="field">
       <label>الدرس</label>
       <select id="postLesson">
-        ${lessons.map(l => `<option value="${l.id}" ${l.id===selected?'selected':''}>${l.title}</option>`).join('')}
+        ${lessons.map(l => `<option value="${l.id}" ${l.id===selected?'selected':''}>${mmEsc(l.title)}</option>`).join('')}
       </select>
     </div>
     <div class="field">
@@ -1778,11 +1780,11 @@ function viewChallengeShare(){
   return `
   <div class="content-app">
     ${pageHead('🔥 تحدي اليوم', 'شاركي ردك بالطريقة اللي تناسبك')}
-    ${state.challenge && state.challenge.text ? `<div class="challenge-banner">${state.challenge.text}</div>` : ''}
+    ${state.challenge && state.challenge.text ? `<div class="challenge-banner">${mmEsc(state.challenge.text)}</div>` : ''}
     <div class="field">
       <label>الدرس المرتبط</label>
       <select id="challengeLesson">
-        ${lessons.map(l => `<option value="${l.id}" ${l.id===selected?'selected':''}>${l.title}</option>`).join('')}
+        ${lessons.map(l => `<option value="${l.id}" ${l.id===selected?'selected':''}>${mmEsc(l.title)}</option>`).join('')}
       </select>
     </div>
     <div class="field">
@@ -1858,7 +1860,7 @@ function viewAskQuestion(){
     <div class="field">
       <label>الدرس</label>
       <select id="questionLesson">
-        ${lessons.map(l => `<option value="${l.id}" ${l.id===selected?'selected':''}>${l.title}</option>`).join('')}
+        ${lessons.map(l => `<option value="${l.id}" ${l.id===selected?'selected':''}>${mmEsc(l.title)}</option>`).join('')}
       </select>
     </div>
     <div class="field">
@@ -1914,7 +1916,7 @@ function viewAchievements(){
         <button class="list-row" ${isMe ? 'style="cursor:default;" disabled' : `data-action="view-student-profile" data-uid="${st.uid}"`}>
           <div style="width:22px; text-align:center; font-weight:700; color:var(--ink-faint); flex-shrink:0;">${i+1}</div>
           ${avatarHtml(st, 30)}
-          <div style="flex:1; font-weight:700; color:var(--ink);">${st.displayName}${isMe ? ' (أنتِ)' : ''}</div>
+          <div style="flex:1; font-weight:700; color:var(--ink);">${mmEsc(st.displayName)}${isMe ? ' (أنتِ)' : ''}</div>
           <div style="color:var(--primary); font-weight:700; font-size:12.5px;">${st.points} نقطة</div>
           ${!isMe ? '<span class="chev">←</span>' : ''}
         </button>`;
@@ -1976,7 +1978,7 @@ function viewStudentsList(){
         <button class="list-row" ${isMe ? 'style="cursor:default;" disabled' : `data-action="view-student-profile" data-uid="${st.uid}"`}>
           <div style="width:20px; text-align:center; font-weight:700; color:var(--ink-faint); font-size:12px; flex-shrink:0;">${i+1}</div>
           ${avatarHtml(st, 34)}
-          <div style="flex:1; font-weight:700; color:var(--ink); font-size:13.5px;">${st.displayName}${isMe ? ' (أنتِ)' : ''}</div>
+          <div style="flex:1; font-weight:700; color:var(--ink); font-size:13.5px;">${mmEsc(st.displayName)}${isMe ? ' (أنتِ)' : ''}</div>
           <div style="color:var(--primary); font-weight:700; font-size:12px;">${st.points} نقطة</div>
           ${!isMe ? '<span class="chev">←</span>' : ''}
         </button>`;
@@ -2045,7 +2047,7 @@ function viewTeacherHome(){
     </button>
     <div class="section-title">🔥 تحدي اليوم</div>
     <form id="challengeForm" class="challenge-edit-card">
-      <textarea id="challengeInput" placeholder="مثال: اشرحي في 60 ثانية: لماذا لا يسقط برج بيزا؟">${state.challenge && state.challenge.text ? state.challenge.text : ''}</textarea>
+      <textarea id="challengeInput" placeholder="مثال: اشرحي في 60 ثانية: لماذا لا يسقط برج بيزا؟">${state.challenge && state.challenge.text ? mmEsc(state.challenge.text) : ''}</textarea>
       <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الحفظ...':(state.challenge && state.challenge.text ? icon('save',17)+' تحديث التحدي' : icon('plus',17)+' نشر تحدي اليوم')}</button>
     </form>
 
@@ -2072,7 +2074,7 @@ function viewTeacherHome(){
     <div class="card" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:4px 12px;">
       ${state.lessons.map(l => `
         <div class="list-row" style="cursor:default;">
-          <div><div class="r-title">${l.title}</div></div>
+          <div><div class="r-title">${mmEsc(l.title)}</div></div>
         </div>`).join('')}
     </div>` : ''}
     <button class="link-btn" data-action="logout">تسجيل الخروج</button>
@@ -2086,12 +2088,12 @@ function pendingPostCard(p){
     <div class="p-head">
       ${avatarHtml(p, 38)}
       <div style="flex:1;">
-        <div class="p-who">${p.studentName}</div>
-        <div class="p-meta">${t ? t.label + ' · ' : ''}${lessonTitleById(p.lessonId)}</div>
+        <div class="p-who">${mmEsc(p.studentName)}</div>
+        <div class="p-meta">${t ? t.label + ' · ' : ''}${mmEsc(lessonTitleById(p.lessonId))}</div>
       </div>
     </div>
-    ${p.title ? `<div class="p-title">${p.title}</div>` : ''}
-    <div class="p-body" style="margin-bottom:12px;">${p.content}</div>
+    ${p.title ? `<div class="p-title">${mmEsc(p.title)}</div>` : ''}
+    <div class="p-body" style="margin-bottom:12px;">${mmEsc(p.content)}</div>
     ${p.imageUrl ? `<img src="${p.imageUrl}" class="post-image" alt="صورة الشرح" loading="lazy" style="margin-bottom:12px;">` : ''}
     ${p.voiceNote && p.voiceNote.dataUrl ? `<audio controls src="${p.voiceNote.dataUrl}" class="post-audio" style="margin-bottom:12px;"></audio>` : ''}
     ${mindMapBlock(p)}
