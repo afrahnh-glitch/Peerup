@@ -138,6 +138,14 @@ export async function fetchPostsByStudent(db, uid){
   return snap.docs.map(d => ({id: d.id, ...d.data()}));
 }
 
+// للنقاط: المشاركات المعتمدة فقط. ضروري لأن قاعدة posts ما تسمح للطالبة تقرأ مشاركات
+// غيرها غير المعتمدة، وأي استعلام يمسّها يُرفض بالكامل (القواعد ليست فلتر).
+export async function fetchApprovedPostsByStudent(db, uid){
+  const q = query(collection(db, 'posts'), where('studentUid', '==', uid), where('status', '==', 'approved'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({id: d.id, ...d.data()}));
+}
+
 export async function fetchAnswersByStudent(db, uid){
   const q = query(collection(db, 'answers'), where('studentUid', '==', uid));
   const snap = await getDocs(q);
@@ -215,7 +223,7 @@ export async function attachLikeInfo(db, posts, uid){
 // شرح معتمد = 10، إجابة = 5، كل "أفادني" استلمتها على شرح معتمد = 2.
 export async function computeStudentPoints(db, uid){
   const [myPosts, myAnswers, userSnap] = await Promise.all([
-    fetchPostsByStudent(db, uid),
+    fetchApprovedPostsByStudent(db, uid),
     fetchAnswersByStudent(db, uid),
     getDoc(doc(db, 'users', uid)).catch(() => null),
   ]);
@@ -481,7 +489,7 @@ export async function fetchLeaderboard(db, limitN){
   const snap = await getDocs(q);
   const students = snap.docs.map(d => ({uid: d.id, displayName: d.data().displayName, avatarId: d.data().avatarId || null, avatarUrl: d.data().avatarUrl || null}));
   const withPoints = await Promise.all(students.map(async (s) => ({
-    ...s, ...(await computeStudentPoints(db, s.uid)),
+    ...s, ...(await computeStudentPoints(db, s.uid).catch(() => ({points: 0, explanationsCount: 0, answersCount: 0, likesReceived: 0, helpedCount: 0}))),
   })));
   return withPoints.sort((a, b) => b.points - a.points).slice(0, limitN || 5);
 }
