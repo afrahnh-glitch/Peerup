@@ -336,9 +336,9 @@ let challengeMode = null; // null | 'text' | 'voice' | 'map' — طريقة ال
 
 /* ---------- تسجيل صوتي: يُخزَّن كـ Base64 داخل نفس مستند المشاركة
    (بدون Firebase Storage)، بسقف مدة قصير يضمن بقاء الحجم صغيرًا جدًا. ---------- */
-const VOICE_MAX_SECONDS = 20;
-// حد حجم التسجيل داخل مستند Firestore (الحد الأقصى للمستند ~1MB). آيفون يتجاهل خفض الجودة فيطلع الملف أكبر
-const VOICE_MAX_CHARS = 850000;
+const VOICE_MAX_SECONDS = 60;
+// التسجيل يُرفع لـ Firebase Storage ويُحفظ رابطه فقط بمستند Firestore (مستند Firestore حده 1MB)
+const VOICE_MAX_BYTES = 2.5 * 1024 * 1024; // الحد داخل Storage (قواعد Storage 3MB)
 let voiceNote = null;        // {dataUrl, duration} بعد انتهاء التسجيل
 let mediaRecorder = null;
 let mediaStream = null;
@@ -347,6 +347,17 @@ let recordStartMs = 0;
 let recordTimer = null;
 
 function fmtSec(s){ return '0:' + String(s).padStart(2, '0'); }
+// يرفع التسجيل الصوتي لـ Storage ويرجّع {dataUrl: رابط, duration} (بدون الـblob)
+async function uploadVoiceNote(voice){
+  if(!voice) return null;
+  if(!voice.blob) return {dataUrl: voice.dataUrl, duration: voice.duration};
+  const type = voice.blob.type || 'audio/mp4';
+  const ext = type.includes('webm') ? 'webm' : type.includes('ogg') ? 'ogg' : 'm4a';
+  const fileRef = ref(storage, `voice/${state.profile.uid}/${Date.now()}.${ext}`);
+  await uploadBytes(fileRef, voice.blob, {contentType: type.split(';')[0]});
+  const url = await getDownloadURL(fileRef);
+  return {dataUrl: url, duration: voice.duration};
+}
 function blobToDataUrl(blob){
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -374,7 +385,7 @@ function renderVoiceArea(){
   } else {
     box.innerHTML = `
       <button type="button" class="btn btn-primary" data-action="start-voice">${icon('mic',17)} ابدئي التسجيل</button>
-      <div class="hint" style="text-align:center; margin-top:6px;">٢٠ ثانية كحد أقصى</div>`;
+      <div class="hint" style="text-align:center; margin-top:6px;">دقيقة واحدة كحد أقصى</div>`;
   }
 }
 async function startRecording(){
@@ -406,7 +417,7 @@ async function startRecording(){
     const blob = new Blob(recordChunks, {type: mediaRecorder.mimeType || 'audio/webm'});
     const duration = Math.min(VOICE_MAX_SECONDS, Math.round((Date.now() - recordStartMs) / 1000));
     const dataUrl = await blobToDataUrl(blob);
-    voiceNote = {dataUrl, duration};
+    voiceNote = {dataUrl, duration, blob};
     if(mediaStream){ mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
     mediaRecorder = null;
     renderVoiceArea();
@@ -880,7 +891,7 @@ async function handleSubmitPost(){
   const mindMap = (attachMode === 'map' && mapDoc && mmNodeCount(mapDoc) > 1) ? mmSerialize(mapDoc) : null;
   if(mindMap && JSON.stringify(mindMap).length > 60000){ showToast('الخريطة كبيرة جدًا، قلّلي عدد العقد.'); return; }
   const voice = (attachMode === 'voice' && voiceNote) ? voiceNote : null;
-  if(voice && voice.dataUrl.length > VOICE_MAX_CHARS){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
+  if(voice && voice.blob && voice.blob.size > VOICE_MAX_BYTES){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
   if(attachMode === 'voice' && mediaRecorder && mediaRecorder.state === 'recording'){ showToast('أوقفي التسجيل قبل الإرسال.'); return; }
   if(attachMode === 'photo' && !photoBlob){ showToast('اختاري صورة قبل الإرسال.'); return; }
   setState({loading:true});
@@ -892,6 +903,7 @@ async function handleSubmitPost(){
       await uploadBytes(fileRef, photoBlob, {contentType: 'image/jpeg'});
       imageUrl = await getDownloadURL(fileRef);
     }
+    const voiceUploaded = await uploadVoiceNote(voice);
     const lesson = (state.lessons || []).find(l => l.id === lessonId);
     await createPost(db, {
       lessonId,
@@ -901,7 +913,7 @@ async function handleSubmitPost(){
       title,
       content,
       mindMap,
-      voiceNote: voice,
+      voiceNote: voiceUploaded,
       imageUrl,
     });
     mapDoc = null;
@@ -1829,7 +1841,7 @@ async function handleSubmitChallenge(){
   } else if(challengeMode === 'voice'){
     if(mediaRecorder && mediaRecorder.state === 'recording'){ showToast('أوقفي التسجيل قبل الإرسال.'); return; }
     if(!voiceNote){ showToast('سجّلي إجابتك الصوتية قبل الإرسال.'); return; }
-    if(voiceNote.dataUrl.length > VOICE_MAX_CHARS){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
+    if(voiceNote.blob && voiceNote.blob.size > VOICE_MAX_BYTES){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
     voice = voiceNote;
     content = '🔥 إجابة صوتية على تحدي اليوم';
   } else if(challengeMode === 'map'){
@@ -1840,6 +1852,7 @@ async function handleSubmitChallenge(){
   }
   setState({loading:true});
   try{
+    const voiceUploaded = await uploadVoiceNote(voice);
     const lesson = (state.lessons || []).find(l => l.id === lessonId);
     await createPost(db, {
       lessonId,
@@ -1849,7 +1862,7 @@ async function handleSubmitChallenge(){
       title: '🔥 تحدي اليوم',
       content,
       mindMap,
-      voiceNote: voice,
+      voiceNote: voiceUploaded,
     });
     mapDoc = null; voiceNote = null; challengeMode = null;
     setState({loading:false});
