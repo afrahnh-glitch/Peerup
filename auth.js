@@ -57,6 +57,13 @@ const ICONS = {
   refresh: '<path d="M4 11a8 8 0 0 1 14-5.2M20 13a8 8 0 0 1-14 5.2"/><path d="M18 3v4.5h-4.5M6 21v-4.5h4.5"/>',
   edit: '<path d="M4 20h4.2L19 9.2a2 2 0 0 0 0-2.8l-1.4-1.4a2 2 0 0 0-2.8 0L4 15.8V20Z"/><path d="M13.5 6.5l4 4"/>',
   save: '<path d="M5 4h11l3 3v13H5V4Z"/><path d="M8 4v5h7V4"/><path d="M8 14h8v6H8v-6Z"/>',
+  star: '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9 6.8 19.7l1-5.9L3.5 9.7l5.9-.8L12 3.5Z"/>',
+  users: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3 20v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1"/><path d="M16 5.6a3.2 3.2 0 0 1 0 5.8"/><path d="M18 14.3a5 5 0 0 1 3 4.7v1"/>',
+  flame: '<path d="M12 3c.5 3-1.5 4.5-3 6.5A6.5 6.5 0 0 0 7.5 14 4.5 4.5 0 0 0 12 20a4.5 4.5 0 0 0 4.5-4.5c0-2-1-3-2-4.2-.3 1.2-.9 1.9-1.7 2.2C13.4 10.5 13.3 6.5 12 3Z"/>',
+  rocket: '<path d="M12 3c3.5 1.8 5.5 5.2 5.5 9v3.5h-11V12c0-3.8 2-7.2 5.5-9Z"/><circle cx="12" cy="10" r="1.7"/><path d="M6.5 13.5 4 16.5v2.5l3.5-1.5M17.5 13.5l2.5 3v2.5l-3.5-1.5"/><path d="M10.5 18.5 12 21l1.5-2.5"/>',
+  chat: '<path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5V16H6a2 2 0 0 1-2-2V6Z"/>',
+  teacher: '<path d="M2.5 9 12 4.5 21.5 9 12 13.5 2.5 9Z"/><path d="M6.5 11.3V16c0 1.4 2.5 2.7 5.5 2.7s5.5-1.3 5.5-2.7v-4.7"/><path d="M21.5 9v5"/>',
+  checkcircle: '<circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.8 2.8L16.3 9.5"/>',
 };
 function icon(name, size = 20){
   const d = ICONS[name];
@@ -330,6 +337,8 @@ let challengeMode = null; // null | 'text' | 'voice' | 'map' — طريقة ال
 /* ---------- تسجيل صوتي: يُخزَّن كـ Base64 داخل نفس مستند المشاركة
    (بدون Firebase Storage)، بسقف مدة قصير يضمن بقاء الحجم صغيرًا جدًا. ---------- */
 const VOICE_MAX_SECONDS = 20;
+// حد حجم التسجيل داخل مستند Firestore (الحد الأقصى للمستند ~1MB). آيفون يتجاهل خفض الجودة فيطلع الملف أكبر
+const VOICE_MAX_CHARS = 850000;
 let voiceNote = null;        // {dataUrl, duration} بعد انتهاء التسجيل
 let mediaRecorder = null;
 let mediaStream = null;
@@ -871,7 +880,7 @@ async function handleSubmitPost(){
   const mindMap = (attachMode === 'map' && mapDoc && mmNodeCount(mapDoc) > 1) ? mmSerialize(mapDoc) : null;
   if(mindMap && JSON.stringify(mindMap).length > 60000){ showToast('الخريطة كبيرة جدًا، قلّلي عدد العقد.'); return; }
   const voice = (attachMode === 'voice' && voiceNote) ? voiceNote : null;
-  if(voice && voice.dataUrl.length > 400000){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
+  if(voice && voice.dataUrl.length > VOICE_MAX_CHARS){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
   if(attachMode === 'voice' && mediaRecorder && mediaRecorder.state === 'recording'){ showToast('أوقفي التسجيل قبل الإرسال.'); return; }
   if(attachMode === 'photo' && !photoBlob){ showToast('اختاري صورة قبل الإرسال.'); return; }
   setState({loading:true});
@@ -1176,7 +1185,7 @@ function viewLanding(){
 
     <div class="space-quiz-card" style="margin-bottom:18px;">
       <img src="images/stars.svg" class="space-quiz-stars" alt="" aria-hidden="true">
-      <div class="space-quiz-tag">🚀 مسابقة أسبوع الفضاء</div>
+      <div class="space-quiz-tag">${icon('rocket',17)}<span>مسابقة أسبوع الفضاء</span></div>
       <div class="space-quiz-text">10 أسئلة عن الفضاء<br>هل تستطيعين الوصول إلى القمة؟</div>
       <button class="btn space-quiz-btn" data-action="nav-space-quiz">ابدئي المسابقة</button>
     </div>
@@ -1394,7 +1403,7 @@ function viewSpaceQuizLeaderboard(){
           <div class="lb-time">${fmtMMSS(r.completionTime)}</div>
         </div>`;
       }).join('')}
-    </div>` : `<div class="empty-state"><span class="emoji">🚀</span>ولا مستكشفة شاركت لين الحين.</div>`}
+    </div>` : `<div class="empty-state"><span class="emoji">${icon('rocket',30)}</span>ولا مستكشفة شاركت لين الحين.</div>`}
     <button class="btn" style="margin-top:18px; background:rgba(255,255,255,.14); color:#fff;" data-action="back-to-landing-intro">العودة إلى PeerUp</button>
   </div>`;
 }
@@ -1528,13 +1537,13 @@ function viewStudentHome(){
           <div class="hero-avatar">${avatarHtml(p, 36)}</div>
         </div>
       </div>
-      <h1>${greetingWord()}، ${p.displayName || ''} 👋</h1>
+      <h1>${greetingWord()}، ${p.displayName || ''}</h1>
       <p class="sub">افهمي، ساعدي، ارتقي…</p>
       ${s ? `
       <div class="hero-stats">
-        <div class="hero-stat"><span class="hs-ic">⭐</span><span class="hs-v">${s.points}</span><span class="hs-l">نقطة</span></div>
-        <div class="hero-stat"><span class="hs-ic">💡</span><span class="hs-v">${s.explanationsCount}</span><span class="hs-l">شرح</span></div>
-        <div class="hero-stat"><span class="hs-ic">🤝</span><span class="hs-v">${s.helpedCount}</span><span class="hs-l">ساعدتِ</span></div>
+        <div class="hero-stat"><span class="hs-ic">${icon('star',14)}</span><span class="hs-v">${s.points}</span><span class="hs-l">نقطة</span></div>
+        <div class="hero-stat"><span class="hs-ic">${icon('lightbulb',14)}</span><span class="hs-v">${s.explanationsCount}</span><span class="hs-l">شرح</span></div>
+        <div class="hero-stat"><span class="hs-ic">${icon('users',14)}</span><span class="hs-v">${s.helpedCount}</span><span class="hs-l">ساعدتِ</span></div>
       </div>` : ''}
     </div>
     <div style="padding:0 18px;">
@@ -1557,7 +1566,7 @@ function viewStudentHome(){
       ${state.challenge && state.challenge.text ? `
       <div class="challenge-card">
         <img src="images/rocket.svg" class="challenge-rocket" alt="" aria-hidden="true">
-        <div class="challenge-tag">🔥 تحدي اليوم</div>
+        <div class="challenge-tag">${icon('flame',15)}<span>تحدي اليوم</span></div>
         <div class="challenge-text">${mmEsc(state.challenge.text)}</div>
         <button class="btn challenge-btn" data-action="nav-challenge-share">أشارك بالتحدي ←</button>
       </div>` : ''}
@@ -1572,13 +1581,13 @@ function viewStudentHome(){
 
       <div class="space-quiz-card">
         <img src="images/stars.svg" class="space-quiz-stars" alt="" aria-hidden="true">
-        <div class="space-quiz-tag">🚀 مسابقة أسبوع الفضاء</div>
+        <div class="space-quiz-tag">${icon('rocket',17)}<span>مسابقة أسبوع الفضاء</span></div>
         <div class="space-quiz-text">اختبري معلوماتك عن الفضاء،<br>واجعلي اسمك بين أسرع المستكشفات!</div>
         <button class="btn space-quiz-btn" data-action="nav-space-quiz">ابدئي المسابقة ←</button>
       </div>
 
       ${lessons.length ? `
-      <div class="section-title">📚 دروس ${subj ? subj.name : ''}</div>
+      <div class="section-title">${icon('book',18)}<span>دروس ${subj ? subj.name : ''}</span></div>
       <div class="lesson-list">
         ${lessons.map((l, i) => `
           <button class="lesson-row" data-action="nav-lesson" data-id="${l.id}">
@@ -1588,7 +1597,7 @@ function viewStudentHome(){
           </button>`).join('')}
       </div>` : `
       <div class="empty-state" style="margin-top:24px;">
-        <span class="emoji">📭</span>
+        <span class="emoji">${icon('inbox',30)}</span>
         المحتوى لسه ما تهيّأ. اطلبي من معلمتك تسجل دخولها وتضغط زر "تهيئة المحتوى" من لوحتها.
       </div>`}
       <button class="peerup-credit" data-action="nav-about-story">
@@ -1622,7 +1631,7 @@ function viewSubjectLessons(){
             <span class="chev">←</span>
           </button>`).join('')}
       </div>` : `
-      <div class="empty-state"><span class="emoji">📭</span>ما فيه دروس بعد.</div>`}
+      <div class="empty-state"><span class="emoji">${icon('inbox',30)}</span>ما فيه دروس بعد.</div>`}
     </div>
   </div>`;
 }
@@ -1820,7 +1829,7 @@ async function handleSubmitChallenge(){
   } else if(challengeMode === 'voice'){
     if(mediaRecorder && mediaRecorder.state === 'recording'){ showToast('أوقفي التسجيل قبل الإرسال.'); return; }
     if(!voiceNote){ showToast('سجّلي إجابتك الصوتية قبل الإرسال.'); return; }
-    if(voiceNote.dataUrl.length > 400000){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
+    if(voiceNote.dataUrl.length > VOICE_MAX_CHARS){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
     voice = voiceNote;
     content = '🔥 إجابة صوتية على تحدي اليوم';
   } else if(challengeMode === 'map'){
@@ -2028,7 +2037,7 @@ function viewTeacherHome(){
       <button class="theme-toggle theme-toggle-abs" data-action="toggle-theme" aria-label="تبديل الوضع الداكن">${icon(effectiveTheme()==='dark'?'sun':'moon',17)}</button>
       <div class="dash-avatar">${(p.displayName||'?')[0]}</div>
       <h2 style="margin:0;">${p.displayName || ''}</h2>
-      <span class="role-chip teacher">👩🏻‍🏫 معلمة</span>
+      <span class="role-chip teacher">${icon('teacher',14)}<span>معلمة</span></span>
     </div>
     <button class="role-card" data-action="nav-teacher-review" style="margin-top:4px;">
       <div class="badge" style="background:var(--coral-soft); color:var(--coral);">${icon('inbox',20)}</div>
@@ -2036,16 +2045,16 @@ function viewTeacherHome(){
       <span class="chev">←</span>
     </button>
     <button class="role-card" data-action="nav-teacher-comments" style="margin-top:4px;">
-      <div class="badge" style="background:var(--primary-soft); color:var(--primary);">💬</div>
+      <div class="badge" style="background:var(--primary-soft); color:var(--primary);">${icon('chat',20)}</div>
       <div><div class="r-title">تعليقات الزوار</div><div class="r-sub">راجعي آراء الزوار وأخفي غير المناسب</div></div>
       <span class="chev">←</span>
     </button>
     <button class="role-card" data-action="nav-space-quiz-admin" style="margin-top:4px;">
-      <div class="badge" style="background:var(--primary-soft); color:var(--primary);">🚀</div>
+      <div class="badge" style="background:var(--primary-soft); color:var(--primary);">${icon('rocket',20)}</div>
       <div><div class="r-title">نتائج مسابقة الفضاء</div><div class="r-sub">راجعي النتائج واحذفي أي مشاركة غير مناسبة</div></div>
       <span class="chev">←</span>
     </button>
-    <div class="section-title">🔥 تحدي اليوم</div>
+    <div class="section-title">${icon('flame',18)}<span>تحدي اليوم</span></div>
     <form id="challengeForm" class="challenge-edit-card">
       <textarea id="challengeInput" placeholder="مثال: اشرحي في 60 ثانية: لماذا لا يسقط برج بيزا؟">${state.challenge && state.challenge.text ? mmEsc(state.challenge.text) : ''}</textarea>
       <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الحفظ...':(state.challenge && state.challenge.text ? icon('save',17)+' تحديث التحدي' : icon('plus',17)+' نشر تحدي اليوم')}</button>
@@ -2058,7 +2067,7 @@ function viewTeacherHome(){
       ما فيه محتوى بعد. اضغطي زر "تهيئة/تحديث الدروس الأساسية" تحت عشان تُنشئ
       مادة الفيزياء ودروسها في قاعدة البيانات.` : `
       <br><br>
-      ✅ المحتوى الأساسي موجود. تقدرين تضغطين "تهيئة/تحديث الدروس الأساسية" في أي وقت
+      المحتوى الأساسي موجود. تقدرين تضغطين "تهيئة/تحديث الدروس الأساسية" في أي وقت
       لتحديث قائمة الدروس الافتراضية (هذا آمن ولا يحذف مشاركات الطالبات لاحقًا).`}
     </div>
     <button class="btn btn-primary" style="margin-top:14px;" data-action="seed-content" ${state.loading?'disabled':''}>${state.loading?'جارِ التهيئة...':icon('refresh',17)+' تهيئة / تحديث الدروس الأساسية'}</button>
@@ -2110,7 +2119,7 @@ function viewSpaceQuizAdmin(){
   return `
   <div class="content-app">
     <div class="page-head" style="padding-top:2px;">
-      <div><h2>🚀 نتائج مسابقة الفضاء</h2><div class="p-sub">${results.length} مشاركة</div></div>
+      <div><h2>${icon('rocket',20)} نتائج مسابقة الفضاء</h2><div class="p-sub">${results.length} مشاركة</div></div>
     </div>
     ${results.length ? `
     <button class="btn" style="width:auto; padding:9px 16px; margin-bottom:14px; background:var(--danger-soft); color:var(--danger); font-size:12.5px;" data-action="reset-space-quiz-results">إعادة ضبط كل النتائج</button>
@@ -2121,7 +2130,7 @@ function viewSpaceQuizAdmin(){
           <button class="btn" style="width:auto; padding:0 12px; background:var(--danger-soft); color:var(--danger);" data-action="delete-space-quiz-result" data-id="${r.id}">${icon('trash',16)}</button>
         </div>
       </div>`).join('')}` : `
-      <div class="empty-state"><span class="emoji">🚀</span>ولا مشاركة وصلت بعد.</div>`}
+      <div class="empty-state"><span class="emoji">${icon('rocket',30)}</span>ولا مشاركة وصلت بعد.</div>`}
   </div>`;
 }
 
@@ -2130,7 +2139,7 @@ function viewTeacherComments(){
   return `
   <div class="content-app">
     <div class="page-head" style="padding-top:2px;">
-      <div><h2>💬 تعليقات الزوار</h2><div class="p-sub">${comments.length} تعليق على صفحة البداية</div></div>
+      <div><h2>${icon('chat',20)} تعليقات الزوار</h2><div class="p-sub">${comments.length} تعليق على صفحة البداية</div></div>
     </div>
     ${comments.length ? comments.map(c => `
       <div class="post-card">
@@ -2140,7 +2149,7 @@ function viewTeacherComments(){
         </div>
         <div class="p-body">${mmEsc(c.text)}</div>
       </div>`).join('') : `
-      <div class="empty-state"><span class="emoji">💬</span>ولا تعليق وصل بعد.</div>`}
+      <div class="empty-state"><span class="emoji">${icon('chat',30)}</span>ولا تعليق وصل بعد.</div>`}
   </div>`;
 }
 
@@ -2149,10 +2158,10 @@ function viewTeacherReview(){
   return `
   <div class="content-app">
     <div class="page-head" style="padding-top:2px;">
-      <div><h2>📥 المراجعة</h2><div class="p-sub">${pending.length} مشاركة تنتظر الاعتماد</div></div>
+      <div><h2>${icon('inbox',20)} المراجعة</h2><div class="p-sub">${pending.length} مشاركة تنتظر الاعتماد</div></div>
     </div>
     ${pending.length ? pending.map(pendingPostCard).join('') : `
-      <div class="empty-state"><span class="emoji">✅</span>ما فيه شي بانتظار المراجعة حاليًا.</div>`}
+      <div class="empty-state"><span class="emoji">${icon('checkcircle',30)}</span>ما فيه شي بانتظار المراجعة حاليًا.</div>`}
   </div>`;
 }
 
