@@ -816,3 +816,33 @@ input{font-family:inherit;}
   .hero-planet, .hero-stars, .success-rocket, .title-stars, .nav-raised, .toast, .pill-btn.liked{animation:none !important;}
   .btn, .role-card, .list-row, .pill-btn, .navitem, .mm-btn, .qa-card, .lesson-row{transition:none !important;}
 }
+
+/* أيقونات موحّدة بدل الإيموجي في الصفحة الرئيسية */
+.hero-stat .hs-ic{display:inline-flex; align-items:center;}
+.challenge-tag, .space-quiz-tag, .section-title{display:flex; align-items:center; gap:7px;}
+.section-title .icon{color:var(--primary);}
+.empty-state .emoji{display:flex; justify-content:center; color:var(--ink-faint);}
+.role-chip{display:inline-flex; align-items:center; gap:6px;}
+.dash-head h2 .icon, .p-head h2 .icon{vertical-align:-3px; margin-inline-end:4px;}
+
+/* اختيار درس تحدي اليوم */
+.challenge-lesson-label{font-size:12.5px; font-weight:700; color:var(--ink);}
+.challenge-edit-card select{width:100%; border:1.5px solid var(--border); border-radius:12px; padding:10px 12px; font-size:13.5px; font-family:inherit; color:var(--ink); background:var(--surface);}
+.challenge-lesson-chip{display:inline-flex; align-items:center; gap:6px; margin-top:10px; font-size:12px; font-weight:700; background:rgba(255,255,255,.22); border-radius:999px; padding:5px 12px;}
+
+/* الشعبة + نجمة الأسبوع */
+.section-picker{display:flex; align-items:center; justify-content:center; gap:10px; margin:12px 0 2px;}
+.section-picker-label{font-size:12.5px; font-weight:700; color:var(--ink-soft);}
+.section-picker-opts{display:flex; gap:6px;}
+.section-opt{min-width:38px; height:34px; border-radius:999px; border:1.5px solid var(--border); background:var(--surface); color:var(--ink-soft); font-family:'El Messiri'; font-weight:700; font-size:15px; transition:all .15s ease;}
+.section-opt:active{transform:scale(.95);}
+.section-opt.on{background:var(--primary); border-color:var(--primary); color:#fff;}
+.weekly-row{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0;}
+.weekly-card{background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:12px; box-shadow:0 8px 20px -16px rgba(23,37,84,.16); min-width:0; display:flex; flex-direction:column; gap:8px;}
+.weekly-tag{display:flex; align-items:center; gap:6px; font-size:12px; font-weight:800; color:var(--primary);}
+.weekly-body{display:flex; align-items:center; gap:8px; min-width:0;}
+.weekly-name{font-weight:700; font-size:13.5px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;}
+.weekly-big{font-family:'El Messiri'; font-weight:700; font-size:22px; color:var(--ink);}
+.weekly-sub{font-size:11.5px; color:var(--ink-soft);}
+.weekly-empty{font-size:12px; color:var(--ink-soft); line-height:1.7;}
+@media (max-width:340px){.weekly-row{grid-template-columns:1fr;}}
