@@ -122,13 +122,19 @@ export async function fetchAnswersForQuestion(db, questionId){
 export async function fetchQuestionsWithAnswers(db, lessonId){
   const base = collection(db, 'questions');
   const q = lessonId ? query(base, where('lessonId', '==', lessonId)) : query(base);
-  const snap = await getDocs(q);
+  // سؤال + كل الإجابات بطلبين متوازيين (بدل طلب منفصل لكل سؤال)
+  const [snap, answersSnap] = await Promise.all([getDocs(q), getDocs(collection(db, 'answers'))]);
+  const byQuestion = {};
+  answersSnap.docs.forEach(d => {
+    const a = {id: d.id, ...d.data()};
+    (byQuestion[a.questionId] = byQuestion[a.questionId] || []).push(a);
+  });
   const questions = snap.docs
     .map(d => ({id: d.id, ...d.data()}))
     .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
-  await Promise.all(questions.map(async (question) => {
-    question.answers = await fetchAnswersForQuestion(db, question.id);
-  }));
+  questions.forEach(question => {
+    question.answers = (byQuestion[question.id] || []).sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
+  });
   return questions;
 }
 
@@ -484,14 +490,53 @@ export async function computeTeacherStats(db){
   };
 }
 
+// ===== تحميل جماعي سريع =====
+// بدل ما نحسب نقاط كل طالبة باستعلامات منفصلة (كان يبطّئ "إنجازي" كلما زاد عدد
+// الطالبات)، نجيب 5 مجموعات مرة وحدة ونحسب كل شي بالذاكرة، مع كاش 60 ثانية.
+let _activityCache = null;
+export function invalidateActivityCache(){ _activityCache = null; }
+async function fetchActivityData(db){
+  if(_activityCache && Date.now() - _activityCache.ts < 60000) return _activityCache.data;
+  const [usersSnap, approved, answersSnap, interSnap, questionsSnap] = await Promise.all([
+    getDocs(query(collection(db, 'users'), where('role', '==', 'student'))),
+    fetchAllApprovedPosts(db),
+    getDocs(collection(db, 'answers')),
+    getDocs(collection(db, 'interactions')),
+    getDocs(collection(db, 'questions')),
+  ]);
+  const students = usersSnap.docs.map(d => {
+    const u = d.data();
+    return {uid: d.id, displayName: u.displayName, avatarId: u.avatarId || null, avatarUrl: u.avatarUrl || null,
+      section: u.section || null, spaceBonus: u.spaceWeekQuizCorrect ? 5 : 0};
+  });
+  const answers = answersSnap.docs.map(d => { const a = d.data(); return {studentUid: a.studentUid, questionId: a.questionId, ms: a.createdAtMs || 0}; });
+  const interactions = interSnap.docs.map(d => { const x = d.data(); return {postId: x.postId, ms: (x.createdAt && x.createdAt.toMillis) ? x.createdAt.toMillis() : 0}; });
+  const questionAuthor = {};
+  questionsSnap.docs.forEach(d => { questionAuthor[d.id] = d.data().studentUid; });
+  const data = {students, approved, answers, interactions, questionAuthor};
+  _activityCache = {ts: Date.now(), data};
+  return data;
+}
+
 export async function fetchLeaderboard(db, limitN){
-  const q = query(collection(db, 'users'), where('role', '==', 'student'));
-  const snap = await getDocs(q);
-  const students = snap.docs.map(d => ({uid: d.id, displayName: d.data().displayName, avatarId: d.data().avatarId || null, avatarUrl: d.data().avatarUrl || null}));
-  const withPoints = await Promise.all(students.map(async (s) => ({
-    ...s, ...(await computeStudentPoints(db, s.uid).catch(() => ({points: 0, explanationsCount: 0, answersCount: 0, likesReceived: 0, helpedCount: 0}))),
-  })));
-  return withPoints.sort((a, b) => b.points - a.points).slice(0, limitN || 5);
+  const {students, approved, answers, interactions, questionAuthor} = await fetchActivityData(db);
+  const authorOf = {};
+  const stats = {};
+  students.forEach(s => { stats[s.uid] = {...s, points: 0, explanationsCount: 0, answersCount: 0, likesReceived: 0, _helped: new Set()}; });
+  approved.forEach(p => { authorOf[p.id] = p.studentUid; if(stats[p.studentUid]) stats[p.studentUid].explanationsCount++; });
+  interactions.forEach(x => { const a = authorOf[x.postId]; if(a && stats[a]) stats[a].likesReceived++; });
+  answers.forEach(a => {
+    const st = stats[a.studentUid]; if(!st) return;
+    st.answersCount++;
+    const qa = questionAuthor[a.questionId];
+    if(qa && qa !== a.studentUid) st._helped.add(qa);
+  });
+  const out = Object.values(stats).map(st => {
+    const {_helped, spaceBonus, section, ...rest} = st;
+    return {...rest, helpedCount: _helped.size,
+      points: st.explanationsCount * 10 + st.answersCount * 5 + st.likesReceived * 2 + spaceBonus};
+  });
+  return out.sort((a, b) => b.points - a.points).slice(0, limitN || 5);
 }
 
 
@@ -503,42 +548,30 @@ export async function setSection(db, uid, section){
   await updateDoc(doc(db, 'users', uid), {section});
 }
 
-// بداية الأسبوع (الأحد 00:00 بتوقيت الجهاز)
+// "الأسبوع" = آخر 7 أيام متدحرجة (مو أسبوع تقويمي)، عشان ما تصير النجمة فاضية
+// أول يوم من الأسبوع الجديد.
 export function weekStartMs(now = new Date()){
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  d.setDate(d.getDate() - d.getDay());
-  return d.getTime();
+  return now.getTime() - 7 * 24 * 60 * 60 * 1000;
 }
 
-// نقاط الأسبوع بنفس معادلة النقاط الكلية (شرح معتمد 10، إجابة 5، أفادني 2)
+// نقاط آخر 7 أيام بنفس معادلة النقاط الكلية (شرح معتمد 10، إجابة 5، أفادني 2)
 // بدون مكافأة الفضاء. شرح الأسبوع يُحسب بتاريخ إرساله. كل القراءات مسموحة
 // لأي طالبة مسجّلة (مشاركات معتمدة فقط، إجابات، تفاعلات، ملفات الطالبات).
 export async function computeWeeklyHighlights(db){
   const startMs = weekStartMs();
-  const [usersSnap, approved, answersSnap, interSnap] = await Promise.all([
-    getDocs(query(collection(db, 'users'), where('role', '==', 'student'))),
-    fetchAllApprovedPosts(db),
-    getDocs(query(collection(db, 'answers'), where('createdAtMs', '>=', startMs))),
-    getDocs(query(collection(db, 'interactions'), where('createdAt', '>=', new Date(startMs)))),
-  ]);
+  const {students: all, approved, answers, interactions} = await fetchActivityData(db);
   const students = {};
-  usersSnap.docs.forEach(d => {
-    const u = d.data();
-    students[d.id] = {uid: d.id, displayName: u.displayName, avatarId: u.avatarId || null,
-      avatarUrl: u.avatarUrl || null, section: u.section || null, weekPoints: 0};
-  });
+  all.forEach(u => { students[u.uid] = {uid: u.uid, displayName: u.displayName, avatarId: u.avatarId,
+    avatarUrl: u.avatarUrl, section: u.section, weekPoints: 0}; });
   const authorOf = {};
   approved.forEach(p => {
     authorOf[p.id] = p.studentUid;
     if((p.createdAtMs || 0) >= startMs && students[p.studentUid]) students[p.studentUid].weekPoints += 10;
   });
-  answersSnap.docs.forEach(d => {
-    const a = d.data();
-    if(students[a.studentUid]) students[a.studentUid].weekPoints += 5;
-  });
-  interSnap.docs.forEach(d => {
-    const author = authorOf[d.data().postId];
-    if(author && students[author]) students[author].weekPoints += 2;
+  answers.forEach(a => { if(a.ms >= startMs && students[a.studentUid]) students[a.studentUid].weekPoints += 5; });
+  interactions.forEach(x => {
+    const author = authorOf[x.postId];
+    if(x.ms >= startMs && author && students[author]) students[author].weekPoints += 2;
   });
   const list = Object.values(students);
   const ranked = list.filter(s => s.weekPoints > 0)
