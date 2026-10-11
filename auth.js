@@ -1565,14 +1565,14 @@ function weeklyCardsHtml(){
             <div class="weekly-name">${mmEsc(star.displayName)}${star.uid === me.uid ? ' (أنتِ)' : ''}</div>
           </div>
           <div class="weekly-sub">${star.weekPoints} نقطة هذا الأسبوع</div>` : `
-          <div class="weekly-empty">لسه ما فيه نجمة هذا الأسبوع. كوني الأولى!</div>`}
+          <div class="weekly-empty">باقي ما فيه نجمة هذا الأسبوع. كوني الأولى!</div>`}
         </div>
         <div class="weekly-card">
           <div class="weekly-tag">${icon('users',15)}<span>الفصل الأكثر تفاعلًا</span></div>
           ${top ? `
           <div class="weekly-big">شعبة ${top.id}</div>
           <div class="weekly-sub">${Math.round(top.avg * 10) / 10} نقطة لكل طالبة</div>` : `
-          <div class="weekly-empty">${me.section ? 'لسه ما بدأ التنافس بين الشعب.' : 'اختاري شعبتك من صفحة إنجازي'}</div>`}
+          <div class="weekly-empty">${me.section ? 'باقي ما بدأ التنافس بين الشعب.' : 'اختاري شعبتك من صفحة إنجازي'}</div>`}
         </div>
       </div>`;
 }
@@ -1657,7 +1657,7 @@ function viewStudentHome(){
       </div>` : `
       <div class="empty-state" style="margin-top:24px;">
         <span class="emoji">${icon('inbox',30)}</span>
-        المحتوى لسه ما تهيّأ. اطلبي من معلمتك تسجل دخولها وتضغط زر "تهيئة المحتوى" من لوحتها.
+        المحتوى باقي ما تهيّأ. اطلبي من معلمتك تسجل دخولها وتضغط زر "تهيئة المحتوى" من لوحتها.
       </div>`}
       <button class="peerup-credit" data-action="nav-about-story">
         <div class="credit-name">PeerUp</div>
