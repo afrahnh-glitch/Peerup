@@ -432,9 +432,9 @@ export async function fetchChallenge(db){
   const snap = await getDoc(doc(db, 'challenge', 'current'));
   return snap.exists() ? snap.data() : null;
 }
-export async function setChallenge(db, text){
+export async function setChallenge(db, text, lessonId){
   await setDoc(doc(db, 'challenge', 'current'), {
-    text: String(text).trim().slice(0, 200), updatedAt: serverTimestamp(),
+    text: String(text).trim().slice(0, 200), lessonId: lessonId ? String(lessonId) : null, updatedAt: serverTimestamp(),
   });
 }
 
@@ -492,4 +492,64 @@ export async function fetchLeaderboard(db, limitN){
     ...s, ...(await computeStudentPoints(db, s.uid).catch(() => ({points: 0, explanationsCount: 0, answersCount: 0, likesReceived: 0, helpedCount: 0}))),
   })));
   return withPoints.sort((a, b) => b.points - a.points).slice(0, limitN || 5);
+}
+
+
+/* ================= الشعبة + نجمة الأسبوع + الفصل الأكثر تفاعلًا ================= */
+export const SECTIONS = ['1', '2', '3'];
+
+export async function setSection(db, uid, section){
+  if(!SECTIONS.includes(section)) throw new Error('bad section');
+  await updateDoc(doc(db, 'users', uid), {section});
+}
+
+// بداية الأسبوع (الأحد 00:00 بتوقيت الجهاز)
+export function weekStartMs(now = new Date()){
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  d.setDate(d.getDate() - d.getDay());
+  return d.getTime();
+}
+
+// نقاط الأسبوع بنفس معادلة النقاط الكلية (شرح معتمد 10، إجابة 5، أفادني 2)
+// بدون مكافأة الفضاء. شرح الأسبوع يُحسب بتاريخ إرساله. كل القراءات مسموحة
+// لأي طالبة مسجّلة (مشاركات معتمدة فقط، إجابات، تفاعلات، ملفات الطالبات).
+export async function computeWeeklyHighlights(db){
+  const startMs = weekStartMs();
+  const [usersSnap, approved, answersSnap, interSnap] = await Promise.all([
+    getDocs(query(collection(db, 'users'), where('role', '==', 'student'))),
+    fetchAllApprovedPosts(db),
+    getDocs(query(collection(db, 'answers'), where('createdAtMs', '>=', startMs))),
+    getDocs(query(collection(db, 'interactions'), where('createdAt', '>=', new Date(startMs)))),
+  ]);
+  const students = {};
+  usersSnap.docs.forEach(d => {
+    const u = d.data();
+    students[d.id] = {uid: d.id, displayName: u.displayName, avatarId: u.avatarId || null,
+      avatarUrl: u.avatarUrl || null, section: u.section || null, weekPoints: 0};
+  });
+  const authorOf = {};
+  approved.forEach(p => {
+    authorOf[p.id] = p.studentUid;
+    if((p.createdAtMs || 0) >= startMs && students[p.studentUid]) students[p.studentUid].weekPoints += 10;
+  });
+  answersSnap.docs.forEach(d => {
+    const a = d.data();
+    if(students[a.studentUid]) students[a.studentUid].weekPoints += 5;
+  });
+  interSnap.docs.forEach(d => {
+    const author = authorOf[d.data().postId];
+    if(author && students[author]) students[author].weekPoints += 2;
+  });
+  const list = Object.values(students);
+  const ranked = list.filter(s => s.weekPoints > 0)
+    .sort((a, b) => b.weekPoints - a.weekPoints || String(a.displayName).localeCompare(String(b.displayName), 'ar'));
+  const star = ranked[0] || null;
+  // الفصل الأكثر تفاعلًا = أعلى متوسط نقاط أسبوعية للطالبة الواحدة (عدل بين الشعب بأحجام مختلفة)
+  const sections = SECTIONS.map(id => {
+    const members = list.filter(s => s.section === id);
+    const total = members.reduce((s, m) => s + m.weekPoints, 0);
+    return {id, count: members.length, total, avg: members.length ? total / members.length : 0};
+  });
+  const topSection = sections.filter(s => s.total > 0).sort((a, b) => b.avg - a.avg || b.total - a.total)[0] || null;
+  return {star, sections, topSection};
 }
