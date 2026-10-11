@@ -675,7 +675,7 @@ async function loadProfileAndGo(uid){
 
 async function handleLogout(){
   await signOut(auth);
-  setState({view:'landing', role:null, mode:'login', profile:null, error:'', success:'', history:[]});
+  setState({view:'landing', role:null, mode:'login', profile:null, error:'', success:'', history:[], leaderboard:null, myStats:null, questionsLoaded:false, allQuestions:[], weekly:null});
 }
 
 /* ---------- in-app navigation (after login) ---------- */
@@ -865,13 +865,25 @@ async function handleSubmitSpaceFact(){
 }
 
 async function openAchievements(){
+  // لو عندنا نتائج جاهزة (من تسجيل الدخول أو زيارة سابقة) نفتح الصفحة فورًا
+  // ونحدّثها بالخلفية، بدل ما نخلّي الطالبة تنتظر.
+  const cachedBoard = state.leaderboard || null;
+  const refresh = async () => {
+    const [myStats, leaderboard] = await Promise.all([
+      computeStudentPoints(db, state.profile.uid).catch(() => state.myStats || null),
+      fetchLeaderboard(db, 5).catch(() => cachedBoard || []),
+    ]);
+    return {myStats, leaderboard};
+  };
+  if(state.myStats && cachedBoard){
+    navigate('achievements', {myStats: state.myStats, leaderboard: cachedBoard});
+    refresh().then(r => { if(state.view === 'achievements') setState(r); else state.leaderboard = r.leaderboard; });
+    return;
+  }
   setState({loading:true});
-  const [myStats, leaderboard] = await Promise.all([
-    computeStudentPoints(db, state.profile.uid).catch(() => null),
-    fetchLeaderboard(db, 5).catch(() => []),
-  ]);
+  const r = await refresh();
   setState({loading:false});
-  navigate('achievements', {myStats, leaderboard});
+  navigate('achievements', r);
 }
 async function openStudentsList(){
   setState({loading:true});
@@ -891,9 +903,21 @@ async function openStudentProfile(uid){
   navigate('studentProfile', {viewedStudent: profile, viewedStats: stats});
 }
 async function openQuestionsList(){
-  let allQuestions = await fetchQuestionsWithAnswers(db).catch(() => []);
-  allQuestions = await attachAvatarsToQuestions(allQuestions).catch(() => allQuestions);
-  navigate('questionsList', {allQuestions});
+  const load = async () => {
+    const qs = await fetchQuestionsWithAnswers(db).catch(() => null);
+    if(!qs) return null;
+    return attachAvatarsToQuestions(qs).catch(() => qs);
+  };
+  // لو زارت الصفحة قبل: نفتحها فورًا بالنسخة المحفوظة ونحدّثها بالخلفية.
+  if(state.questionsLoaded){
+    navigate('questionsList', {allQuestions: state.allQuestions});
+    load().then(qs => { if(qs){ if(state.view === 'questionsList') setState({allQuestions: qs}); else state.allQuestions = qs; } });
+    return;
+  }
+  setState({loading:true});
+  const qs = await load();
+  setState({loading:false});
+  navigate('questionsList', {allQuestions: qs || [], questionsLoaded: !!qs});
 }
 function lessonTitleById(id){
   const l = (state.lessons || []).find(x => x.id === id);
@@ -1564,8 +1588,8 @@ function weeklyCardsHtml(){
             ${avatarHtml(star, 40)}
             <div class="weekly-name">${mmEsc(star.displayName)}${star.uid === me.uid ? ' (أنتِ)' : ''}</div>
           </div>
-          <div class="weekly-sub">${star.weekPoints} نقطة هذا الأسبوع</div>` : `
-          <div class="weekly-empty">باقي ما فيه نجمة هذا الأسبوع. كوني الأولى!</div>`}
+          <div class="weekly-sub">${star.weekPoints} نقطة خلال آخر 7 أيام</div>` : `
+          <div class="weekly-empty">ما فيه نشاط خلال آخر 7 أيام. كوني النجمة الأولى!</div>`}
         </div>
         <div class="weekly-card">
           <div class="weekly-tag">${icon('users',15)}<span>الفصل الأكثر تفاعلًا</span></div>
@@ -1657,7 +1681,7 @@ function viewStudentHome(){
       </div>` : `
       <div class="empty-state" style="margin-top:24px;">
         <span class="emoji">${icon('inbox',30)}</span>
-        المحتوى باقي ما تهيّأ. اطلبي من معلمتك تسجل دخولها وتضغط زر "تهيئة المحتوى" من لوحتها.
+        المحتوى لسه ما تهيّأ. اطلبي من معلمتك تسجل دخولها وتضغط زر "تهيئة المحتوى" من لوحتها.
       </div>`}
       <button class="peerup-credit" data-action="nav-about-story">
         <div class="credit-name">PeerUp</div>
