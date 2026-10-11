@@ -16,7 +16,7 @@ import {
   createAnswer, fetchAnswersForQuestion,
   fetchPendingPosts, approvePost, rejectPost, deletePost,
   attachLikeInfo, likePost, computeStudentPoints, fetchLeaderboard,
-  fetchChallenge, setChallenge, computeTeacherStats,
+  fetchChallenge, setChallenge, computeTeacherStats, SECTIONS, setSection, computeWeeklyHighlights,
   attachBookmarkInfo, addBookmark, removeBookmark, fetchBookmarkedPosts,
   fetchAllApprovedPosts,
   setAvatar, attachAvatarInfo, fetchAvatarsFor,
@@ -296,6 +296,22 @@ function discardPhoto(){
   if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
   photoBlob = null; photoPreviewUrl = null;
   renderAttachArea();
+}
+
+/* ---------- اختيار الشعبة (1 / 2 / 3) ---------- */
+async function handleSetSection(section){
+  if(!SECTIONS.includes(section) || (state.profile && state.profile.section === section)) return;
+  const prev = state.profile.section || null;
+  setState({profile: {...state.profile, section}});
+  try{
+    await setSection(db, state.profile.uid, section);
+    const weekly = await computeWeeklyHighlights(db).catch(() => state.weekly);
+    setState({weekly});
+    showToast('تم حفظ شعبتك');
+  }catch(err){
+    setState({profile: {...state.profile, section: prev}});
+    showToast('صار خطأ أثناء الحفظ، حاولي مرة أخرى.');
+  }
 }
 
 /* ---------- حفظ اختيار الصورة الشخصية (Avatar جاهز أو افتراضي) ---------- */
@@ -637,12 +653,13 @@ async function loadProfileAndGo(uid){
   const profile = snap.data();
   // نجيب كل شي ما يعتمد على نتيجة شي ثاني بنفس الوقت بدل الواحد ورا الثاني
   // (هذا كان سبب جزء من البطء: كل طلب ينتظر اللي قبله بدون داعٍ).
-  const [subjects, challenge, roleSpecific] = await Promise.all([
+  const [subjects, challenge, roleSpecific, weekly] = await Promise.all([
     fetchSubjects(db).catch(() => []),
     fetchChallenge(db).catch(() => null),
     profile.role === 'teacher'
       ? fetchPendingPosts(db).catch(() => [])
       : computeStudentPoints(db, uid).catch(() => null),
+    profile.role === 'teacher' ? Promise.resolve(null) : computeWeeklyHighlights(db).catch(() => null),
   ]);
   let lessons = [];
   if(subjects.length){
@@ -651,7 +668,7 @@ async function loadProfileAndGo(uid){
   const pendingPosts = profile.role === 'teacher' ? roleSpecific : [];
   const myStats = profile.role === 'teacher' ? null : roleSpecific;
   setState({
-    loading:false, profile, subjects, lessons, pendingPosts, myStats, challenge, history:[],
+    loading:false, profile, subjects, lessons, pendingPosts, myStats, challenge, weekly, history:[],
     view: profile.role === 'teacher' ? 'teacherHome' : 'studentHome',
   });
 }
@@ -1027,11 +1044,11 @@ async function handleSubmitLandingComment(){
   }
 }
 
-async function handleSetChallenge(text){
+async function handleSetChallenge(text, lessonId){
   setState({loading:true});
   try{
-    await setChallenge(db, text);
-    setState({loading:false, challenge:{text}});
+    await setChallenge(db, text, lessonId);
+    setState({loading:false, challenge:{text, lessonId: lessonId || null}});
     showToast('🔥 تحدي اليوم صار منشور للطالبات');
   }catch(err){
     setState({loading:false});
@@ -1532,6 +1549,33 @@ function viewAboutStory(){
 }
 
 /* ---------- student views ---------- */
+function weeklyCardsHtml(){
+  const w = state.weekly;
+  if(!w) return '';
+  const me = state.profile || {};
+  const star = w.star;
+  const top = w.topSection;
+  return `
+      <div class="weekly-row">
+        <div class="weekly-card">
+          <div class="weekly-tag">${icon('star',15)}<span>نجمة الأسبوع</span></div>
+          ${star ? `
+          <div class="weekly-body">
+            ${avatarHtml(star, 40)}
+            <div class="weekly-name">${mmEsc(star.displayName)}${star.uid === me.uid ? ' (أنتِ)' : ''}</div>
+          </div>
+          <div class="weekly-sub">${star.weekPoints} نقطة هذا الأسبوع</div>` : `
+          <div class="weekly-empty">لسه ما فيه نجمة هذا الأسبوع. كوني الأولى!</div>`}
+        </div>
+        <div class="weekly-card">
+          <div class="weekly-tag">${icon('users',15)}<span>الفصل الأكثر تفاعلًا</span></div>
+          ${top ? `
+          <div class="weekly-big">شعبة ${top.id}</div>
+          <div class="weekly-sub">${Math.round(top.avg * 10) / 10} نقطة لكل طالبة</div>` : `
+          <div class="weekly-empty">${me.section ? 'لسه ما بدأ التنافس بين الشعب.' : 'اختاري شعبتك من صفحة إنجازي'}</div>`}
+        </div>
+      </div>`;
+}
 function viewStudentHome(){
   const p = state.profile || {};
   const lessons = state.lessons || [];
@@ -1575,11 +1619,14 @@ function viewStudentHome(){
         <span class="chev">←</span>
       </button>
 
+      ${weeklyCardsHtml()}
+
       ${state.challenge && state.challenge.text ? `
       <div class="challenge-card">
         <img src="images/rocket.svg" class="challenge-rocket" alt="" aria-hidden="true">
         <div class="challenge-tag">${icon('flame',15)}<span>تحدي اليوم</span></div>
         <div class="challenge-text">${mmEsc(state.challenge.text)}</div>
+        ${(() => { const cl = state.challenge.lessonId && (state.lessons || []).find(l => l.id === state.challenge.lessonId); return cl ? `<div class="challenge-lesson-chip">${icon('book',13)}<span>${mmEsc(cl.title)}</span></div>` : ''; })()}
         <button class="btn challenge-btn" data-action="nav-challenge-share">أشارك بالتحدي ←</button>
       </div>` : ''}
 
@@ -1797,7 +1844,8 @@ function viewShareSuccess(){
 
 function viewChallengeShare(){
   const lessons = state.lessons || [];
-  const selected = state.shareLessonId || (lessons[0] && lessons[0].id) || '';
+  const chLesson = state.challenge && state.challenge.lessonId && lessons.some(l => l.id === state.challenge.lessonId) ? state.challenge.lessonId : '';
+  const selected = state.shareLessonId || chLesson || (lessons[0] && lessons[0].id) || '';
   return `
   <div class="content-app">
     ${pageHead('🔥 تحدي اليوم', 'شاركي ردك بالطريقة اللي تناسبك')}
@@ -1918,6 +1966,12 @@ function viewAchievements(){
       </div>
       <h2 style="margin:10px 0 0;">${p.displayName || ''}</h2>
       <button class="link-btn" style="margin:2px 0 0;" data-action="open-avatar-picker">تغيير الصورة</button>
+      <div class="section-picker">
+        <span class="section-picker-label">شعبتي</span>
+        <div class="section-picker-opts" role="group" aria-label="اختيار الشعبة">
+          ${SECTIONS.map(sec => `<button type="button" class="section-opt ${p.section === sec ? 'on' : ''}" data-action="set-section" data-section="${sec}" aria-pressed="${p.section === sec}">${sec}</button>`).join('')}
+        </div>
+      </div>
       <div class="points-big">${s.points} PeerPoints</div>
     </div>
     <div style="display:flex; gap:10px; margin:16px 0 22px;">
@@ -2069,6 +2123,11 @@ function viewTeacherHome(){
     </button>
     <div class="section-title">${icon('flame',18)}<span>تحدي اليوم</span></div>
     <form id="challengeForm" class="challenge-edit-card">
+      <label class="challenge-lesson-label" for="challengeLessonPick">الدرس المرتبط بالتحدي</label>
+      <select id="challengeLessonPick">
+        <option value="">بدون درس محدد</option>
+        ${(state.lessons || []).map(l => `<option value="${l.id}" ${state.challenge && state.challenge.lessonId === l.id ? 'selected' : ''}>${mmEsc(l.title)}</option>`).join('')}
+      </select>
       <textarea id="challengeInput" placeholder="مثال: اشرحي في 60 ثانية: لماذا لا يسقط برج بيزا؟">${state.challenge && state.challenge.text ? mmEsc(state.challenge.text) : ''}</textarea>
       <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الحفظ...':(state.challenge && state.challenge.text ? icon('save',17)+' تحديث التحدي' : icon('plus',17)+' نشر تحدي اليوم')}</button>
     </form>
@@ -2310,6 +2369,8 @@ document.addEventListener('click', (e) => {
     if(b) b.remove();
   } else if(action === 'noop'){
     /* امتصاص الضغطة داخل بطاقة المودال حتى لا تغلقه (مثل الضغط على العنوان) */
+  } else if(action === 'set-section'){
+    handleSetSection(el.dataset.section);
   } else if(action === 'open-avatar-picker'){
     setState({avatarModalOpen: true});
   } else if(action === 'close-avatar-picker'){
@@ -2475,7 +2536,7 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = document.getElementById('challengeInput').value.trim();
     if(!text){ showToast('اكتبي نص التحدي قبل النشر'); return; }
-    handleSetChallenge(text);
+    handleSetChallenge(text, document.getElementById('challengeLessonPick').value);
     return;
   }
   if(e.target.id === 'landingCommentForm'){
