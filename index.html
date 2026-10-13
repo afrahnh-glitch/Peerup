@@ -65,7 +65,7 @@
   // تسجيل Service Worker بعد اكتمال تحميل الصفحة حتى لا يؤخر ظهورها أول مرة.
   if('serviceWorker' in navigator){
     window.addEventListener('load', function(){
-      navigator.serviceWorker.register('./service-worker.js').catch(function(){
+      navigator.serviceWorker.register('./service-worker.js', {updateViaCache: 'none'}).catch(function(){
         /* فشل التسجيل (مثلًا HTTP بدل HTTPS محليًا) — التطبيق يستمر يعمل عادي بدون PWA */
       });
     });
