@@ -4,10 +4,13 @@
    محدود بدون إنترنت. لا يلمس أي طلب لـFirebase أو أي نطاق خارجي —
    هذي دائمًا تروح للشبكة مباشرة، بياناتها حيّة ولا تُخزَّن أبدًا هنا.
 
-   عند كل تحديث حقيقي لملفات المشروع، غيّري CACHE_VERSION (أي رقم أو
-   تاريخ جديد) حتى تُستبدل النسخة القديمة تلقائيًا عند الزوار.
+   التحديث التلقائي: الكود (HTML/JS/CSS) يُجلب من الشبكة أولًا دائمًا (مع
+   التحقق من وجود نسخة أحدث)، والنسخة المخزّنة تُستخدم فقط لو ما فيه إنترنت.
+   فأي تحديث ترفعينه على GitHub يوصل للطالبات تلقائيًا بدون مسح أي شي.
+   وعند أول تفعيل لنسخة جديدة من هذا الملف تُحدَّث الصفحات المفتوحة مرة وحدة.
+   (تغيير CACHE_VERSION مو شرط لكل تحديث بعد الآن؛ يكفي لو غيّرتِ هذا الملف.)
    ================================================================== */
-const CACHE_VERSION = 'peerup-cache-v1';
+const CACHE_VERSION = 'peerup-cache-v2';
 
 const PRECACHE_URLS = [
   './',
@@ -40,14 +43,46 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))
-      ))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    const hadOld = keys.some((k) => k !== CACHE_VERSION);
+    await Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)));
+    await self.clients.claim();
+    // تحديث فعلي (مو أول تثبيت): نعيد تحميل الصفحات المفتوحة مرة وحدة لتلتقط الكود الجديد.
+    if(hadOld){
+      const wins = await self.clients.matchAll({type: 'window'});
+      wins.forEach((c) => { try{ c.navigate(c.url); }catch(e){} });
+    }
+  })());
 });
+
+const CODE_RE = /\.(?:js|css|html|webmanifest)$/i;
+
+// الكود: الشبكة أولًا (مع تجاوز كاش المتصفح)، والمخزّن للطوارئ بدون إنترنت.
+async function networkFirst(req){
+  const cache = await caches.open(CACHE_VERSION);
+  try{
+    const resp = await fetch(req, {cache: 'no-cache'});
+    if(resp && resp.status === 200 && resp.type === 'basic') cache.put(req, resp.clone());
+    return resp;
+  }catch(err){
+    const cached = await cache.match(req, {ignoreSearch: true});
+    if(cached) return cached;
+    if(req.mode === 'navigate') return (await cache.match('./index.html')) || Response.error();
+    return Response.error();
+  }
+}
+
+// الصور والأيقونات: نسخة المخزّن فورًا، وتتحدّث بالخلفية للمرة الجاية.
+async function staleWhileRevalidate(req){
+  const cache = await caches.open(CACHE_VERSION);
+  const cached = await cache.match(req);
+  const refresh = fetch(req).then((resp) => {
+    if(resp && resp.status === 200 && resp.type === 'basic') cache.put(req, resp.clone());
+    return resp;
+  }).catch(() => cached);
+  return cached || refresh;
+}
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
@@ -58,21 +93,9 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (req.method !== 'GET') return;
 
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req)
-        .then((resp) => {
-          if (!resp || resp.status !== 200 || resp.type !== 'basic') return resp;
-          const copy = resp.clone();
-          caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy));
-          return resp;
-        })
-        .catch(() => {
-          // ولا إنترنت ولا نسخة مخزّنة: لطلبات التصفّح نرجّع الصفحة
-          // الرئيسية المخزّنة على الأقل بدل خطأ متصفح فاضي.
-          if (req.mode === 'navigate') return caches.match('./index.html');
-        });
-    })
-  );
+  if(req.mode === 'navigate' || CODE_RE.test(url.pathname) || url.pathname.endsWith('/')){
+    event.respondWith(networkFirst(req));
+  }else{
+    event.respondWith(staleWhileRevalidate(req));
+  }
 });
