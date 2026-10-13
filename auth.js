@@ -16,7 +16,7 @@ import {
   createAnswer, fetchAnswersForQuestion,
   fetchPendingPosts, approvePost, rejectPost, deletePost,
   attachLikeInfo, likePost, computeStudentPoints, fetchLeaderboard,
-  fetchChallenge, setChallenge, computeTeacherStats, SECTIONS, setSection, computeWeeklyHighlights,
+  fetchChallenge, setChallenge, challengeKeyOf, fetchChallengeAnswers, computeTeacherStats, SECTIONS, setSection, computeWeeklyHighlights,
   attachBookmarkInfo, addBookmark, removeBookmark, fetchBookmarkedPosts,
   fetchAllApprovedPosts,
   setAvatar, attachAvatarInfo, fetchAvatarsFor,
@@ -290,12 +290,17 @@ async function handlePhotoSelect(file){
     showToast('تعذّر تجهيز الصورة، جربي صورة ثانية.');
     return;
   }
-  renderAttachArea();
+  renderPhotoHost();
 }
 function discardPhoto(){
   if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
   photoBlob = null; photoPreviewUrl = null;
-  renderAttachArea();
+  renderPhotoHost();
+}
+// الصورة تُستخدم بصفحتين: مشاركة الشرح وتحدي الأسبوع
+function renderPhotoHost(){
+  if(state.view === 'challengeShare') renderChallengeAttach();
+  else renderAttachArea();
 }
 
 /* ---------- اختيار الشعبة (1 / 2 / 3) ---------- */
@@ -747,6 +752,15 @@ async function handleToggleBookmark(postId){
     showToast('صار خطأ، حاولي مرة أخرى.');
   }
 }
+async function openChallengeAnswers(){
+  setState({loading:true});
+  let posts = await fetchChallengeAnswers(db, challengeKeyOf(state.challenge)).catch(() => []);
+  posts = await attachLikeInfo(db, posts, state.profile.uid).catch(() => posts);
+  posts = await attachBookmarkInfo(db, posts, state.profile.uid).catch(() => posts);
+  posts = await attachAvatarInfo(db, posts).catch(() => posts);
+  setState({loading:false});
+  navigate('challengeAnswers', {posts});
+}
 async function openSavedPosts(){
   setState({loading:true});
   let savedPosts = await fetchBookmarkedPosts(db, state.profile.uid).catch(() => []);
@@ -1072,8 +1086,9 @@ async function handleSetChallenge(text, lessonId){
   setState({loading:true});
   try{
     await setChallenge(db, text, lessonId);
-    setState({loading:false, challenge:{text, lessonId: lessonId || null}});
-    showToast('🔥 تحدي اليوم صار منشور للطالبات');
+    const fresh = await fetchChallenge(db).catch(() => null);
+    setState({loading:false, challenge: fresh || {text, lessonId: lessonId || null}});
+    showToast('تحدي الأسبوع صار منشور للطالبات');
   }catch(err){
     setState({loading:false});
     showToast('صار خطأ أثناء نشر التحدي. تأكدي إنك مسجّلة كمعلمة.');
@@ -1596,7 +1611,7 @@ function weeklyCardsHtml(){
           ${top ? `
           <div class="weekly-big">شعبة ${top.id}</div>
           <div class="weekly-sub">${Math.round(top.avg * 10) / 10} نقطة لكل طالبة</div>` : `
-          <div class="weekly-empty">${me.section ? 'باقي ما بدأ التنافس بين الشعب.' : 'اختاري شعبتك من صفحة إنجازي'}</div>`}
+          <div class="weekly-empty">${me.section ? 'لسه ما بدأ التنافس بين الشعب.' : 'اختاري شعبتك من صفحة إنجازي'}</div>`}
         </div>
       </div>`;
 }
@@ -1648,10 +1663,11 @@ function viewStudentHome(){
       ${state.challenge && state.challenge.text ? `
       <div class="challenge-card">
         <img src="images/rocket.svg" class="challenge-rocket" alt="" aria-hidden="true">
-        <div class="challenge-tag">${icon('flame',15)}<span>تحدي اليوم</span></div>
+        <div class="challenge-tag">${icon('flame',15)}<span>تحدي الأسبوع</span></div>
         <div class="challenge-text">${mmEsc(state.challenge.text)}</div>
         ${(() => { const cl = state.challenge.lessonId && (state.lessons || []).find(l => l.id === state.challenge.lessonId); return cl ? `<div class="challenge-lesson-chip">${icon('book',13)}<span>${mmEsc(cl.title)}</span></div>` : ''; })()}
         <button class="btn challenge-btn" data-action="nav-challenge-share">أشارك بالتحدي ←</button>
+        <button class="challenge-answers-link" data-action="nav-challenge-answers">إجابات الطالبات</button>
       </div>` : ''}
 
       <div class="space-week-card">
@@ -1869,22 +1885,26 @@ function viewShareSuccess(){
 function viewChallengeShare(){
   const lessons = state.lessons || [];
   const chLesson = state.challenge && state.challenge.lessonId && lessons.some(l => l.id === state.challenge.lessonId) ? state.challenge.lessonId : '';
-  const selected = state.shareLessonId || chLesson || (lessons[0] && lessons[0].id) || '';
+  const selected = chLesson || state.shareLessonId || (lessons[0] && lessons[0].id) || '';
   return `
   <div class="content-app">
-    ${pageHead('🔥 تحدي اليوم', 'شاركي ردك بالطريقة اللي تناسبك')}
+    ${pageHead('تحدي الأسبوع', 'شاركي ردك بالطريقة اللي تناسبك')}
     ${state.challenge && state.challenge.text ? `<div class="challenge-banner">${mmEsc(state.challenge.text)}</div>` : ''}
     <div class="field">
       <label>الدرس المرتبط</label>
+      ${chLesson ? `
+      <div class="locked-lesson">${icon('book',16)}<span>${mmEsc((lessons.find(l => l.id === chLesson) || {}).title || '')}</span></div>
+      <input type="hidden" id="challengeLesson" value="${chLesson}">` : `
       <select id="challengeLesson">
         ${lessons.map(l => `<option value="${l.id}" ${l.id===selected?'selected':''}>${mmEsc(l.title)}</option>`).join('')}
-      </select>
+      </select>`}
     </div>
     <div class="field">
       <label>كيف تبين تجاوبين؟</label>
       <div id="challengeAttach"></div>
     </div>
     <button class="btn btn-coral" data-action="submit-challenge" ${state.loading?'disabled':''}>${state.loading?'جارِ الإرسال...':'إرسال للمعلمة'}</button>
+    <button class="link-btn" data-action="nav-challenge-answers">شوفي إجابات الطالبات المعتمدة</button>
   </div>`;
 }
 function renderChallengeAttach(){
@@ -1894,18 +1914,21 @@ function renderChallengeAttach(){
     <div class="attach-toggle three">
       <button type="button" class="attach-opt ${challengeMode==='text'?'selected':''}" data-action="pick-challenge-mode" data-mode="text">${icon('edit',17)} نص</button>
       <button type="button" class="attach-opt ${challengeMode==='voice'?'selected':''}" data-action="pick-challenge-mode" data-mode="voice">${icon('mic',17)} صوت</button>
+      <button type="button" class="attach-opt ${challengeMode==='photo'?'selected':''}" data-action="pick-challenge-mode" data-mode="photo">${icon('camera',17)} صورة</button>
       <button type="button" class="attach-opt ${challengeMode==='map'?'selected':''}" data-action="pick-challenge-mode" data-mode="map">${icon('map',17)} خريطة</button>
     </div>
     ${challengeMode==='text' ? '<textarea id="challengeText" class="challenge-textarea" placeholder="اكتبي إجابتك هنا..."></textarea>' : ''}
     ${challengeMode==='voice' ? '<div id="voiceArea" class="attach-body"></div>' : ''}
+    ${challengeMode==='photo' ? '<div id="photoArea" class="attach-body"></div>' : ''}
     ${challengeMode==='map' ? '<div id="mapPreview" class="attach-body mm-preview"></div>' : ''}
     ${!challengeMode ? '<div class="hint" style="text-align:center;">اختاري طريقة الإجابة فوق.</div>' : ''}`;
   if(challengeMode === 'voice') renderVoiceArea();
+  if(challengeMode === 'photo') renderPhotoArea();
   if(challengeMode === 'map') renderMapPreview();
 }
 async function handleSubmitChallenge(){
   const lessonId = document.getElementById('challengeLesson').value;
-  if(!challengeMode){ showToast('اختاري طريقة الإجابة أول (نص، صوت، أو خريطة).'); return; }
+  if(!challengeMode){ showToast('اختاري طريقة الإجابة أول (نص، صوت، صورة، أو خريطة).'); return; }
   let content = '', mindMap = null, voice = null;
   if(challengeMode === 'text'){
     content = document.getElementById('challengeText').value.trim();
@@ -1915,28 +1938,41 @@ async function handleSubmitChallenge(){
     if(!voiceNote){ showToast('سجّلي إجابتك الصوتية قبل الإرسال.'); return; }
     if(voiceNote.blob && voiceNote.blob.size > VOICE_MAX_BYTES){ showToast('التسجيل كبير، سجّلي مقطع أقصر.'); return; }
     voice = voiceNote;
-    content = '🔥 إجابة صوتية على تحدي اليوم';
+    content = 'إجابة صوتية على تحدي الأسبوع';
+  } else if(challengeMode === 'photo'){
+    if(!photoBlob){ showToast('اختاري صورة قبل الإرسال.'); return; }
+    content = 'إجابة بصورة على تحدي الأسبوع';
   } else if(challengeMode === 'map'){
     if(!mapDoc || mmNodeCount(mapDoc) < 2){ showToast('أضيفي خريطتك الذهنية قبل الإرسال.'); return; }
     mindMap = mmSerialize(mapDoc);
     if(JSON.stringify(mindMap).length > 60000){ showToast('الخريطة كبيرة جدًا، قلّلي عدد العقد.'); return; }
-    content = '🔥 إجابة بخريطة ذهنية على تحدي اليوم';
+    content = 'إجابة بخريطة ذهنية على تحدي الأسبوع';
   }
   setState({loading:true});
   try{
     const voiceUploaded = await uploadVoiceNote(voice);
+    let imageUrl = null;
+    if(challengeMode === 'photo' && photoBlob){
+      const fileRef = ref(storage, `posts/${state.profile.uid}/${Date.now()}.jpg`);
+      await uploadBytes(fileRef, photoBlob, {contentType: 'image/jpeg'});
+      imageUrl = await getDownloadURL(fileRef);
+    }
     const lesson = (state.lessons || []).find(l => l.id === lessonId);
     await createPost(db, {
       lessonId,
       subjectId: lesson ? lesson.subjectId : (state.subjects[0] && state.subjects[0].id),
       studentUid: state.profile.uid,
       studentName: state.profile.displayName,
-      title: '🔥 تحدي اليوم',
+      title: 'تحدي الأسبوع',
       content,
       mindMap,
       voiceNote: voiceUploaded,
+      imageUrl,
+      challengeKey: challengeKeyOf(state.challenge),
     });
     mapDoc = null; voiceNote = null; challengeMode = null;
+    if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    photoBlob = null; photoPreviewUrl = null;
     setState({loading:false});
     navigate('shareSuccess');
   }catch(err){
@@ -2106,6 +2142,16 @@ function viewStudentProfile(){
   </div>`;
 }
 
+function viewChallengeAnswers(){
+  const posts = state.posts || [];
+  return `
+  <div class="content-app">
+    ${pageHead('إجابات تحدي الأسبوع', 'الإجابات اللي اعتمدتها المعلمة')}
+    ${state.challenge && state.challenge.text ? `<div class="challenge-banner">${mmEsc(state.challenge.text)}</div>` : ''}
+    ${posts.length ? posts.map(postCard).join('') : `
+      <div class="empty-state"><span class="emoji">${icon('inbox',30)}</span>لسه ما فيه إجابات معتمدة لهذا التحدي.</div>`}
+  </div>`;
+}
 function viewSavedPosts(){
   const posts = state.savedPosts || [];
   return `
@@ -2145,7 +2191,7 @@ function viewTeacherHome(){
       <div><div class="r-title">نتائج مسابقة الفضاء</div><div class="r-sub">راجعي النتائج واحذفي أي مشاركة غير مناسبة</div></div>
       <span class="chev">←</span>
     </button>
-    <div class="section-title">${icon('flame',18)}<span>تحدي اليوم</span></div>
+    <div class="section-title">${icon('flame',18)}<span>تحدي الأسبوع</span></div>
     <form id="challengeForm" class="challenge-edit-card">
       <label class="challenge-lesson-label" for="challengeLessonPick">الدرس المرتبط بالتحدي</label>
       <select id="challengeLessonPick">
@@ -2153,7 +2199,7 @@ function viewTeacherHome(){
         ${(state.lessons || []).map(l => `<option value="${l.id}" ${state.challenge && state.challenge.lessonId === l.id ? 'selected' : ''}>${mmEsc(l.title)}</option>`).join('')}
       </select>
       <textarea id="challengeInput" placeholder="مثال: اشرحي في 60 ثانية: لماذا لا يسقط برج بيزا؟">${state.challenge && state.challenge.text ? mmEsc(state.challenge.text) : ''}</textarea>
-      <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الحفظ...':(state.challenge && state.challenge.text ? icon('save',17)+' تحديث التحدي' : icon('plus',17)+' نشر تحدي اليوم')}</button>
+      <button type="submit" class="btn btn-primary" ${state.loading?'disabled':''}>${state.loading?'جارِ الحفظ...':(state.challenge && state.challenge.text ? icon('save',17)+' تحديث التحدي' : icon('plus',17)+' نشر تحدي الأسبوع')}</button>
     </form>
 
     <div class="info-card">
@@ -2325,6 +2371,7 @@ function render(){
   if(state.view === 'askQuestion'){ app.innerHTML = viewAskQuestion() + studentNav(); return; }
   if(state.view === 'questionsList'){ app.innerHTML = viewQuestionsList() + studentNav(); return; }
   if(state.view === 'achievements'){ app.innerHTML = viewAchievements() + studentNav(); return; }
+  if(state.view === 'challengeAnswers'){ app.innerHTML = viewChallengeAnswers() + studentNav(); return; }
   if(state.view === 'savedPosts'){ app.innerHTML = viewSavedPosts() + studentNav(); return; }
   if(state.view === 'aboutStory'){ app.innerHTML = viewAboutStory() + (state.profile ? studentNav() : ''); return; }
   if(state.view === 'spaceJourney'){ app.innerHTML = viewSpaceJourney() + (state.profile ? studentNav() : ''); return; }
@@ -2454,6 +2501,8 @@ document.addEventListener('click', (e) => {
     challengeMode = null;
     mapDoc = null;
     voiceNote = null;
+    if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    photoBlob = null; photoPreviewUrl = null;
     if(mediaRecorder && mediaRecorder.state !== 'inactive') stopRecording();
     navigate('challengeShare');
   } else if(action === 'pick-attach'){
@@ -2520,6 +2569,8 @@ document.addEventListener('click', (e) => {
     handleToggleBookmark(el.dataset.id);
   } else if(action === 'submit-post'){
     handleSubmitPost();
+  } else if(action === 'nav-challenge-answers'){
+    openChallengeAnswers();
   } else if(action === 'pick-challenge-mode'){
     if(mediaRecorder && mediaRecorder.state !== 'inactive') stopRecording();
     challengeMode = (challengeMode === el.dataset.mode) ? null : el.dataset.mode;
