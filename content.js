@@ -64,12 +64,13 @@ export async function seedInitialContent(db){
 // voiceNote: تسجيل صوتي قصير اختياري {dataUrl, duration}
 // كلاهما يُخزَّن داخل نفس المستند (بدون Storage)، وهما بديلان لبعض —
 // مشاركة واحدة تحمل أحدهما أو ولا شي، مو الاثنين معًا.
-export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, mindMap, voiceNote, imageUrl}){
+export async function createPost(db, {lessonId, subjectId, studentUid, studentName, type, title, content, mindMap, voiceNote, imageUrl, challengeKey}){
   const docRef = await addDoc(collection(db, 'posts'), {
     lessonId, subjectId, studentUid, studentName, type: type || null, title, content,
     mindMap: (mindMap && mindMap.nodes && mindMap.nodes.length > 1) ? mindMap : null,
     voiceNote: (voiceNote && voiceNote.dataUrl) ? voiceNote : null,
     imageUrl: imageUrl || null,
+    challengeKey: challengeKey || null,
     status: 'pending', likes: 0,
     createdAt: serverTimestamp(), createdAtMs: Date.now(),
   });
@@ -585,4 +586,19 @@ export async function computeWeeklyHighlights(db){
   });
   const topSection = sections.filter(s => s.total > 0).sort((a, b) => b.avg - a.avg || b.total - a.total)[0] || null;
   return {star, sections, topSection};
+}
+
+
+// مفتاح التحدي الحالي = وقت نشره؛ كل إجابات تحدٍّ معيّن تحمله، فلما تنشر المعلمة
+// تحدي جديد تبدأ قائمة إجابات نظيفة للتحدي الجديد.
+export function challengeKeyOf(ch){
+  return (ch && ch.updatedAt && ch.updatedAt.toMillis) ? String(ch.updatedAt.toMillis()) : null;
+}
+// إجابات التحدي المعتمدة فقط (فلتران بالمساواة، متوافقة مع قاعدة posts للطالبات)
+export async function fetchChallengeAnswers(db, key){
+  if(!key) return [];
+  const q = query(collection(db, 'posts'), where('challengeKey', '==', key), where('status', '==', 'approved'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({id: d.id, ...d.data()}))
+    .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
 }
