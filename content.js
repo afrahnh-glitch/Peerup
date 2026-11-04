@@ -314,49 +314,25 @@ export async function fetchRecentSpaceFacts(db, limitN = 6){
     .slice(0, limitN);
 }
 
-/* ================= مسابقة أسبوع الفضاء (عامة، بدون تسجيل دخول) =================
-   كتابة على 3 مراحل لضمان إن الزمن محسوب من وقت خادم حقيقي، لا يقدر
-   المستخدم يزوّره: بداية → إنهاء (نتيجة) → ختم الزمن (الفرق بين وقتين
-   حقيقيين مخزَّنين فعلًا). ================= */
-export async function startSpaceQuizAttempt(db, name){
-  const ref = await addDoc(collection(db, 'spaceQuizResults'), {
-    name: String(name).trim().slice(0, 30),
-    status: 'started',
-    startedAt: serverTimestamp(),
-  });
-  return ref.id;
+/* ================= إعلان الفائزة بالتحدي =================
+   مستند واحد announcements/winner: القراءة لأي زائر (يظهر بصفحة البداية)،
+   والكتابة للمعلمة فقط. المعلمة هي من تحدد النص المعروض (الاسم كما تحب أن يظهر). */
+export async function fetchWinnerAnnouncement(db, {includeHidden = false} = {}){
+  const snap = await getDoc(doc(db, 'announcements', 'winner'));
+  if(!snap.exists()) return null;
+  const d = snap.data();
+  if(!includeHidden && (!d.active || !d.name)) return null;
+  return {name: d.name || '', note: d.note || '', challenge: d.challenge || '',
+          active: !!d.active, updatedAtMs: d.updatedAtMs || 0};
 }
-export async function completeSpaceQuizAttempt(db, id, score){
-  const ref = doc(db, 'spaceQuizResults', id);
-  const before = await getDoc(ref);
-  await updateDoc(ref, {
-    status: 'completed',
-    score, totalQuestions: 10,
-    name: before.data().name, startedAt: before.data().startedAt,
-    completedAt: serverTimestamp(),
+export async function setWinnerAnnouncement(db, {name, note, challenge, active}){
+  await setDoc(doc(db, 'announcements', 'winner'), {
+    name: String(name || '').trim().slice(0, 60),
+    note: String(note || '').trim().slice(0, 200),
+    challenge: String(challenge || '').trim().slice(0, 200),
+    active: !!active,
+    updatedAtMs: Date.now(),
   });
-  // نقرأ المستند مرة ثانية عشان نجيب القيمة المحلولة الحقيقية لـcompletedAt
-  // (serverTimestamp() ما يرجّع القيمة الفعلية وقت الكتابة نفسها).
-  const after = await getDoc(ref);
-  const d = after.data();
-  const completionTime = d.completedAt.toMillis() - d.startedAt.toMillis();
-  await updateDoc(ref, {
-    completionTime,
-    name: d.name, startedAt: d.startedAt, score: d.score,
-    totalQuestions: d.totalQuestions, status: d.status, completedAt: d.completedAt,
-  });
-  return completionTime;
-}
-export async function fetchSpaceQuizLeaderboard(db, limitN = 50){
-  const snap = await getDocs(collection(db, 'spaceQuizResults'));
-  return snap.docs
-    .map(d => ({id: d.id, ...d.data()}))
-    .filter(r => r.status === 'completed' && typeof r.completionTime === 'number')
-    .sort((a, b) => (b.score - a.score) || (a.completionTime - b.completionTime))
-    .slice(0, limitN);
-}
-export async function deleteSpaceQuizResult(db, id){
-  await deleteDoc(doc(db, 'spaceQuizResults', id));
 }
 
 /* ================= صورة الملف الشخصي (Avatar) ================= */
@@ -549,43 +525,67 @@ export async function setSection(db, uid, section){
   await updateDoc(doc(db, 'users', uid), {section});
 }
 
-// "الأسبوع" = آخر 7 أيام متدحرجة (مو أسبوع تقويمي)، عشان ما تصير النجمة فاضية
-// أول يوم من الأسبوع الجديد.
+// "الأسبوع" = من الأحد 12:00 منتصف الليل بتوقيت الرياض (UTC+3 ثابت، بلا توقيت صيفي)
+// إلى الآن. الدالة ترجع بداية الأسبوع الذي يقع فيه now بالمللي ثانية.
+const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 export function weekStartMs(now = new Date()){
-  return now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  const local = now.getTime() + RIYADH_OFFSET_MS;          // "ساعة الحائط" بالرياض
+  const midnight = Math.floor(local / DAY_MS) * DAY_MS;     // منتصف ليل اليوم الحالي
+  const dow = new Date(midnight).getUTCDay();               // 0 = الأحد
+  return midnight - dow * DAY_MS - RIYADH_OFFSET_MS;
 }
 
-// نقاط آخر 7 أيام بنفس معادلة النقاط الكلية (شرح معتمد 10، إجابة 5، أفادني 2)
+// نقاط الأسبوع (من الأحد) بنفس معادلة النقاط الكلية (شرح معتمد 10، إجابة 5، أفادني 2)
 // بدون مكافأة الفضاء. شرح الأسبوع يُحسب بتاريخ إرساله. كل القراءات مسموحة
 // لأي طالبة مسجّلة (مشاركات معتمدة فقط، إجابات، تفاعلات، ملفات الطالبات).
 export async function computeWeeklyHighlights(db){
   const startMs = weekStartMs();
+  const prevStartMs = startMs - 7 * DAY_MS;
   const {students: all, approved, answers, interactions} = await fetchActivityData(db);
-  const students = {};
-  all.forEach(u => { students[u.uid] = {uid: u.uid, displayName: u.displayName, avatarId: u.avatarId,
-    avatarUrl: u.avatarUrl, section: u.section, weekPoints: 0}; });
   const authorOf = {};
-  approved.forEach(p => {
-    authorOf[p.id] = p.studentUid;
-    if((p.createdAtMs || 0) >= startMs && students[p.studentUid]) students[p.studentUid].weekPoints += 10;
-  });
-  answers.forEach(a => { if(a.ms >= startMs && students[a.studentUid]) students[a.studentUid].weekPoints += 5; });
-  interactions.forEach(x => {
-    const author = authorOf[x.postId];
-    if(x.ms >= startMs && author && students[author]) students[author].weekPoints += 2;
-  });
-  const list = Object.values(students);
-  const ranked = list.filter(s => s.weekPoints > 0)
-    .sort((a, b) => b.weekPoints - a.weekPoints || String(a.displayName).localeCompare(String(b.displayName), 'ar'));
-  const star = ranked[0] || null;
-  // الفصل الأكثر تفاعلًا = أعلى متوسط نقاط أسبوعية للطالبة الواحدة (عدل بين الشعب بأحجام مختلفة)
-  const sections = SECTIONS.map(id => {
-    const members = list.filter(s => s.section === id);
-    const total = members.reduce((s, m) => s + m.weekPoints, 0);
-    return {id, count: members.length, total, avg: members.length ? total / members.length : 0};
-  });
-  const topSection = sections.filter(s => s.total > 0).sort((a, b) => b.avg - a.avg || b.total - a.total)[0] || null;
-  return {star, sections, topSection};
+  approved.forEach(p => { authorOf[p.id] = p.studentUid; });
+
+  // يحسب نشاط الطالبات داخل نافذة زمنية [from, to):
+  // مشاركة معتمدة 10، إجابة على سؤال 5، "أفادني" وصلت لمشاركتها 2.
+  const scoreWindow = (from, to) => {
+    const students = {};
+    all.forEach(u => { students[u.uid] = {uid: u.uid, displayName: u.displayName, avatarId: u.avatarId,
+      avatarUrl: u.avatarUrl, section: u.section, weekPoints: 0, actions: 0}; });
+    const inWin = ms => ms >= from && ms < to;
+    approved.forEach(p => {
+      if(inWin(p.createdAtMs || 0) && students[p.studentUid]){ students[p.studentUid].weekPoints += 10; students[p.studentUid].actions += 1; }
+    });
+    answers.forEach(a => {
+      if(inWin(a.ms) && students[a.studentUid]){ students[a.studentUid].weekPoints += 5; students[a.studentUid].actions += 1; }
+    });
+    interactions.forEach(x => {
+      const author = authorOf[x.postId];
+      if(inWin(x.ms) && author && students[author]){ students[author].weekPoints += 2; students[author].actions += 1; }
+    });
+    const list = Object.values(students);
+    // الأكثر تفاعلًا = أعلى نقاط نشاط، وعند التعادل الأكثر عددًا للمشاركات، ثم الاسم
+    const ranked = list.filter(s => s.weekPoints > 0)
+      .sort((a, b) => b.weekPoints - a.weekPoints || b.actions - a.actions
+        || String(a.displayName).localeCompare(String(b.displayName), 'ar'));
+    const star = ranked[0] || null;
+    // الفصل الأكثر تفاعلًا = أعلى متوسط نقاط للطالبة الواحدة (عدل بين الشعب بأحجام مختلفة)
+    const sections = SECTIONS.map(id => {
+      const members = list.filter(s => s.section === id);
+      const total = members.reduce((s, m) => s + m.weekPoints, 0);
+      return {id, count: members.length, total, avg: members.length ? total / members.length : 0};
+    });
+    const topSection = sections.filter(s => s.total > 0).sort((a, b) => b.avg - a.avg || b.total - a.total)[0] || null;
+    return {star, sections, topSection};
+  };
+
+  const cur = scoreWindow(startMs, Infinity);
+  const prev = scoreWindow(prevStartMs, startMs);
+  return {
+    star: cur.star, sections: cur.sections, topSection: cur.topSection,
+    prevStar: prev.star, prevTopSection: prev.topSection,
+    weekStartMs: startMs,
+  };
 }
 
 
@@ -594,11 +594,42 @@ export async function computeWeeklyHighlights(db){
 export function challengeKeyOf(ch){
   return (ch && ch.updatedAt && ch.updatedAt.toMillis) ? String(ch.updatedAt.toMillis()) : null;
 }
-// إجابات التحدي المعتمدة فقط (فلتران بالمساواة، متوافقة مع قاعدة posts للطالبات)
-export async function fetchChallengeAnswers(db, key){
+// إجابات التحدي المعتمدة فقط. نجمع طريقتين لأن بعض الإجابات قد تفقد وسم التحدي:
+//  1) الوسم challengeKey (الطريقة الأساسية)
+//  2) عنوان الإجابة (تحدي الأسبوع / تحدي اليوم القديم) + أنها أُرسلت بعد نشر التحدي الحالي.
+// الثانية تلتقط إجابات طالبة كان تطبيقها محفوظًا بنسخة قديمة، أو فتحت التطبيق قبل
+// ما تنشر المعلمة التحدي الجديد (فيكون مفتاحها قديم). كلا الاستعلامين فلاتر مساواة
+// فقط ومتوافقان مع قاعدة posts.
+export async function fetchChallengeAnswers(db, ch){
+  const key = challengeKeyOf(ch);
+  const startMs = key ? Number(key) : 0;
   if(!key) return [];
-  const q = query(collection(db, 'posts'), where('challengeKey', '==', key), where('status', '==', 'approved'));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({id: d.id, ...d.data()}))
-    .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+  const byKey = getDocs(query(collection(db, 'posts'),
+    where('challengeKey', '==', key), where('status', '==', 'approved')));
+  const byTitle = getDocs(query(collection(db, 'posts'),
+    where('title', 'in', ['تحدي الأسبوع', '🔥 تحدي اليوم']), where('status', '==', 'approved')));
+  const [a, b] = await Promise.all([byKey, byTitle]);
+  const map = new Map();
+  a.docs.forEach(d => map.set(d.id, {id: d.id, ...d.data()}));
+  b.docs.forEach(d => {
+    const p = {id: d.id, ...d.data()};
+    if((p.createdAtMs || 0) >= startMs) map.set(d.id, p);
+  });
+  return [...map.values()].sort((x, y) => (y.createdAtMs || 0) - (x.createdAtMs || 0));
+}
+
+
+/* ================= حذف الطالبة لمشاركتها (حذف كامل) =================
+   الترتيب مهم: نحذف التفاعلات والحفظات المرتبطة أولًا (القواعد تتحقق من أن
+   المشاركة ما زالت موجودة وأنها لصاحبتها)، ثم يحذف auth.js ملفات Storage،
+   وآخر خطوة حذف مستند المشاركة نفسه. */
+export async function deletePostRelated(db, postId){
+  const [inter, marks] = await Promise.all([
+    getDocs(query(collection(db, 'interactions'), where('postId', '==', postId))),
+    getDocs(query(collection(db, 'bookmarks'), where('postId', '==', postId))),
+  ]);
+  await Promise.all([...inter.docs, ...marks.docs].map(d => deleteDoc(d.ref)));
+}
+export async function deletePostDoc(db, postId){
+  await deleteDoc(doc(db, 'posts', postId));
 }

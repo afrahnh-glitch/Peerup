@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
-  getStorage, ref, uploadBytes, getDownloadURL
+  getStorage, ref, uploadBytes, getDownloadURL, deleteObject
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 import { firebaseConfig } from "./firebase-config.js";
 import {
@@ -18,11 +18,11 @@ import {
   attachLikeInfo, likePost, computeStudentPoints, fetchLeaderboard,
   fetchChallenge, setChallenge, challengeKeyOf, fetchChallengeAnswers, computeTeacherStats, SECTIONS, setSection, computeWeeklyHighlights,
   attachBookmarkInfo, addBookmark, removeBookmark, fetchBookmarkedPosts,
-  fetchAllApprovedPosts,
+  fetchAllApprovedPosts, deletePostRelated, deletePostDoc, invalidateActivityCache,
   setAvatar, attachAvatarInfo, fetchAvatarsFor,
   setSpaceProgress, shareSpaceFact, fetchRecentSpaceFacts,
   submitLandingComment, fetchLandingComments, deleteLandingComment,
-  startSpaceQuizAttempt, completeSpaceQuizAttempt, fetchSpaceQuizLeaderboard, deleteSpaceQuizResult,
+  fetchWinnerAnnouncement, setWinnerAnnouncement,
 } from "./content.js";
 import {
   MindMapEditor, mmSerialize, mmThumbSvg, mmNodeCount, mmSetDefaultTitle, mmEsc, mmNodesLabel,
@@ -112,27 +112,6 @@ const SPACE_QUIZ_BANK = [
   },
 ];
 let SPACE_QUIZ = SPACE_QUIZ_BANK[0];
-/* ---------- مسابقة أسبوع الفضاء: 10 أسئلة ثابتة، متنوعة الصعوبة ---------- */
-const SPACE_COMPETITION_QUESTIONS = [
-  {topic:'النظام الشمسي', q:'كم عدد الكواكب بالمجموعة الشمسية؟', options:['7','8','9','10'], correct:1},
-  {topic:'الكواكب', q:'أي كوكب يُلقّب بـ"الكوكب الأحمر"؟', options:['المشتري','الزهرة','المريخ','زحل'], correct:2},
-  {topic:'النجوم', q:'النجوم تُنتج طاقتها أساسًا عن طريق عملية...؟', options:['الانشطار النووي','الاندماج النووي','الاحتراق الكيميائي','التبخر'], correct:1},
-  {topic:'الشمس', q:'ما حالة المادة الغالبة بالشمس؟', options:['صلبة','سائلة','غازية','بلازما'], correct:3},
-  {topic:'القمر', q:'لماذا نرى دائمًا نفس وجه القمر من الأرض؟', options:['لأن القمر لا يدور حول نفسه إطلاقًا','لأن دورانه حول نفسه يساوي زمن دورانه حول الأرض','لأن الأرض نفسها لا تدور','لأن القمر بعيد جدًا فما يبين فرق'], correct:1},
-  {topic:'الجاذبية', q:'أي وحدة من هذي تقيس "كتلة" الجسم (لا وزنه)؟', options:['نيوتن','كيلوجرام','باسكال','واط'], correct:1},
-  {topic:'الضوء', q:'سرعة الضوء بالفراغ تقارب...؟', options:['300 كم/ث','3,000 كم/ث','300,000 كم/ث','3 مليون كم/ث'], correct:2},
-  {topic:'المجرات', q:'ما اسم أقرب مجرة كبيرة لمجرتنا درب التبانة؟', options:['درب التبانة نفسها','مجرة المرأة المسلسلة (أندروميدا)','سحابة ماجلان الكبرى','العنقاء'], correct:1},
-  {topic:'استكشاف الفضاء', q:'ما اسم أول قمر صناعي يُطلق للفضاء؟', options:['سبوتنيك 1','أبولو 11','فوييجر 1','هابل'], correct:0},
-  {topic:'رواد الفضاء', q:'من أول إنسان مشى على سطح القمر؟', options:['يوري غاغارين','نيل أرمسترونغ','باز ألدرن','جون غلين'], correct:1},
-];
-function shuffleQuizOptions(q){
-  const idx = q.options.map((_, i) => i);
-  for(let i = idx.length - 1; i > 0; i--){
-    const j = Math.floor(Math.random() * (i + 1));
-    [idx[i], idx[j]] = [idx[j], idx[i]];
-  }
-  return {...q, options: idx.map(i => q.options[i]), correct: idx.indexOf(q.correct)};
-}
 
 const SPACE_FACTS = [
   'أشعة الشمس تحتاج حوالي 8 دقائق و20 ثانية عشان توصل للأرض.',
@@ -233,15 +212,9 @@ const state = {
   spaceRecentFacts: [],
   landingComments: [],
   showLandingComments: false,
-  spaceCompName: '',
-  spaceCompAttemptId: null,
-  spaceCompQuestions: [],
-  spaceCompIndex: 0,
-  spaceCompScore: 0,
-  spaceCompAnswered: null,
-  spaceCompDone: false,
-  spaceCompResult: null,
-  spaceCompLeaderboard: [],
+  winner: null,
+  winnerDraft: null,
+  winnerCandidates: [],
   history: [],           // in-app back stack once inside student/teacher screens
 };
 
@@ -658,9 +631,10 @@ async function loadProfileAndGo(uid){
   const profile = snap.data();
   // نجيب كل شي ما يعتمد على نتيجة شي ثاني بنفس الوقت بدل الواحد ورا الثاني
   // (هذا كان سبب جزء من البطء: كل طلب ينتظر اللي قبله بدون داعٍ).
-  const [subjects, challenge, roleSpecific, weekly] = await Promise.all([
+  const [subjects, challenge, winner, roleSpecific, weekly] = await Promise.all([
     fetchSubjects(db).catch(() => []),
     fetchChallenge(db).catch(() => null),
+    fetchWinnerAnnouncement(db).catch(() => null),
     profile.role === 'teacher'
       ? fetchPendingPosts(db).catch(() => [])
       : computeStudentPoints(db, uid).catch(() => null),
@@ -673,7 +647,7 @@ async function loadProfileAndGo(uid){
   const pendingPosts = profile.role === 'teacher' ? roleSpecific : [];
   const myStats = profile.role === 'teacher' ? null : roleSpecific;
   setState({
-    loading:false, profile, subjects, lessons, pendingPosts, myStats, challenge, weekly, history:[],
+    loading:false, profile, subjects, lessons, pendingPosts, myStats, challenge, winner, weekly, history:[],
     view: profile.role === 'teacher' ? 'teacherHome' : 'studentHome',
   });
 }
@@ -691,8 +665,11 @@ function navigate(view, extra={}){
 // صفحة البداية عامة (أي زائر، قبل تسجيل الدخول)، فنجيب التعليقات العامة
 // معها مباشرة بدل ما ننتظر أي حالة تسجيل دخول.
 async function openLanding(){
-  const landingComments = await fetchLandingComments(db, 12).catch(() => []);
-  setState({view: 'landing', landingComments});
+  const [landingComments, winner] = await Promise.all([
+    fetchLandingComments(db, 12).catch(() => []),
+    fetchWinnerAnnouncement(db).catch(() => null),
+  ]);
+  setState({view: 'landing', landingComments, winner});
 }
 function goBack(){
   const prev = state.history.pop();
@@ -728,6 +705,34 @@ async function handleLikePost(postId){
     showToast('يبدو إنك سبق ووصلتِها بـ«أفادني».');
   }
 }
+// حذف الطالبة لمشاركتها نهائيًا: التفاعلات والحفظات، ثم صورتها وتسجيلها من Storage، ثم المشاركة نفسها.
+async function storageDeleteByUrl(url){
+  if(!url || !/^https?:/.test(url)) return;
+  try{ await deleteObject(ref(storage, url)); }
+  catch(err){ if(!(err && err.code === 'storage/object-not-found')) throw err; }
+}
+async function handleDeleteMyPost(postId){
+  const all = [...(state.posts || []), ...(state.savedPosts || []), ...(searchPool || [])];
+  const post = all.find(p => p.id === postId);
+  if(!post || post.studentUid !== state.profile.uid) return;
+  if(!window.confirm('حذف مشاركتك نهائيًا؟ ستُحذف من المنصة بالكامل (مع الصورة أو التسجيل وإعجابات الطالبات) ولا يمكن التراجع، وستنقص نقاطك المرتبطة بها.')) return;
+  setState({loading:true});
+  try{
+    await deletePostRelated(db, postId);
+    await storageDeleteByUrl(post.imageUrl);
+    await storageDeleteByUrl(post.voiceNote && post.voiceNote.dataUrl);
+    await deletePostDoc(db, postId);
+    const drop = (list) => (list || []).filter(p => p.id !== postId);
+    if(searchPool) searchPool = searchPool.filter(p => p.id !== postId);
+    invalidateActivityCache();
+    const myStats = await computeStudentPoints(db, state.profile.uid).catch(() => state.myStats);
+    setState({loading:false, posts: drop(state.posts), savedPosts: drop(state.savedPosts), myStats, leaderboard: null, searchTick: Date.now()});
+    showToast('تم حذف مشاركتك نهائيًا');
+  }catch(err){
+    setState({loading:false});
+    showToast('تعذّر الحذف الكامل. تأكدي من الاتصال، وأن قواعد Firebase الجديدة منشورة.');
+  }
+}
 async function handleToggleBookmark(postId){
   const uid = state.profile.uid;
   const inLesson = (state.posts || []).find(p => p.id === postId);
@@ -754,7 +759,7 @@ async function handleToggleBookmark(postId){
 }
 async function openChallengeAnswers(){
   setState({loading:true});
-  let posts = await fetchChallengeAnswers(db, challengeKeyOf(state.challenge)).catch(() => []);
+  let posts = await fetchChallengeAnswers(db, state.challenge).catch(() => []);
   posts = await attachLikeInfo(db, posts, state.profile.uid).catch(() => posts);
   posts = await attachBookmarkInfo(db, posts, state.profile.uid).catch(() => posts);
   posts = await attachAvatarInfo(db, posts).catch(() => posts);
@@ -776,60 +781,6 @@ function openSpaceJourney(){
   SPACE_QUIZ = SPACE_QUIZ_BANK[Math.floor(Math.random() * SPACE_QUIZ_BANK.length)];
   setState({spaceStation: 1, spaceQuizAnswer: null, spaceFactIndex: 0, spaceRecentFacts: []});
   navigate('spaceJourney');
-}
-function openSpaceQuiz(){
-  setState({
-    spaceCompName: '', spaceCompAttemptId: null, spaceCompQuestions: [],
-    spaceCompIndex: 0, spaceCompScore: 0, spaceCompAnswered: null,
-    spaceCompDone: false, spaceCompResult: null,
-  });
-  navigate('spaceQuiz');
-}
-async function handleStartSpaceQuiz(){
-  const name = document.getElementById('spaceCompNameInput').value.trim();
-  if(name.length < 2 || name.length > 30){ showToast('اكتبي اسمك (بين 2 و30 حرف)'); return; }
-  setState({loading: true});
-  try{
-    const attemptId = await startSpaceQuizAttempt(db, name);
-    const questions = SPACE_COMPETITION_QUESTIONS.map(shuffleQuizOptions);
-    setState({
-      loading: false, spaceCompName: name, spaceCompAttemptId: attemptId,
-      spaceCompQuestions: questions, spaceCompIndex: 0, spaceCompScore: 0, spaceCompAnswered: null,
-    });
-  }catch(err){
-    setState({loading: false});
-    showToast('صار خطأ أثناء البدء، حاولي مرة أخرى.');
-  }
-}
-async function handleAnswerSpaceCompQuiz(i){
-  if(state.spaceCompAnswered !== null) return;
-  const q = state.spaceCompQuestions[state.spaceCompIndex];
-  const correct = i === q.correct;
-  const nextScore = state.spaceCompScore + (correct ? 1 : 0);
-  setState({spaceCompAnswered: i, spaceCompScore: nextScore});
-  setTimeout(async () => {
-    const isLast = state.spaceCompIndex === state.spaceCompQuestions.length - 1;
-    if(!isLast){
-      setState({spaceCompIndex: state.spaceCompIndex + 1, spaceCompAnswered: null});
-      return;
-    }
-    setState({loading: true});
-    try{
-      const completionTime = await completeSpaceQuizAttempt(db, state.spaceCompAttemptId, nextScore);
-      const result = {id: state.spaceCompAttemptId, score: nextScore, completionTime};
-      try{ localStorage.setItem('peerup-space-quiz-result', JSON.stringify(result)); }catch(_e){ /* تجاهل */ }
-      setState({loading: false, spaceCompDone: true, spaceCompResult: result});
-    }catch(err){
-      setState({loading: false});
-      showToast('صار خطأ أثناء حفظ نتيجتك، حاولي مرة أخرى.');
-    }
-  }, 500);
-}
-async function openSpaceQuizLeaderboard(){
-  setState({loading: true});
-  const spaceCompLeaderboard = await fetchSpaceQuizLeaderboard(db, 50).catch(() => []);
-  setState({loading: false});
-  navigate('spaceQuizLeaderboard', {spaceCompLeaderboard});
 }
 async function handleSpaceQuizAnswer(i){
   if(state.spaceQuizAnswer !== null) return;
@@ -1109,30 +1060,35 @@ async function openTeacherComments(){
   const landingComments = await fetchLandingComments(db, 100).catch(() => []);
   navigate('teacherComments', {landingComments});
 }
-async function openSpaceQuizAdmin(){
-  const spaceCompLeaderboard = await fetchSpaceQuizLeaderboard(db, 200).catch(() => []);
-  navigate('spaceQuizAdmin', {spaceCompLeaderboard});
+async function openWinnerAdmin(){
+  setState({loading: true});
+  const [raw, answers] = await Promise.all([
+    fetchWinnerAnnouncement(db, {includeHidden: true}).catch(() => null),
+    state.challenge ? fetchChallengeAnswers(db, state.challenge).catch(() => []) : Promise.resolve([]),
+  ]);
+  const seen = new Set();
+  const winnerCandidates = [];
+  answers.forEach(p => { if(!seen.has(p.studentUid)){ seen.add(p.studentUid); winnerCandidates.push({uid: p.studentUid, name: p.studentName || ''}); } });
+  setState({loading: false});
+  navigate('winnerAdmin', {
+    winnerDraft: raw || {name: '', note: '', challenge: (state.challenge && state.challenge.text) || '', active: false},
+    winnerCandidates,
+  });
 }
-async function handleDeleteSpaceQuizResult(id){
-  try{
-    await deleteSpaceQuizResult(db, id);
-    setState({spaceCompLeaderboard: (state.spaceCompLeaderboard || []).filter(r => r.id !== id)});
-    showToast('تم حذف المشاركة');
-  }catch(err){
-    showToast('صار خطأ أثناء الحذف، تأكدي إنك مسجّلة كمعلمة.');
-  }
-}
-async function handleResetSpaceQuizResults(){
-  const list = state.spaceCompLeaderboard || [];
-  if(!list.length) return;
+async function handleSaveWinner(active){
+  const name = document.getElementById('winnerName').value.trim();
+  const note = document.getElementById('winnerNote').value.trim();
+  const challenge = document.getElementById('winnerChallenge').value.trim();
+  if(active && !name){ showToast('اكتبي اسم الفائزة كما تريدين ظهوره'); return; }
   setState({loading: true});
   try{
-    await Promise.all(list.map(r => deleteSpaceQuizResult(db, r.id)));
-    setState({loading: false, spaceCompLeaderboard: []});
-    showToast('تم حذف كل نتائج المسابقة');
+    await setWinnerAnnouncement(db, {name, note, challenge, active});
+    const winner = active ? {name, note, challenge, active: true} : null;
+    setState({loading: false, winner, winnerDraft: {name, note, challenge, active}});
+    showToast(active ? 'تم نشر الإعلان' : 'تم إخفاء الإعلان');
   }catch(err){
     setState({loading: false});
-    showToast('صار خطأ أثناء إعادة الضبط، حاولي مرة أخرى.');
+    showToast('تعذّر الحفظ. تأكدي من نشر قواعد Firestore الجديدة.');
   }
 }
 async function handleDeleteLandingComment(id){
@@ -1225,6 +1181,18 @@ function teacherNav(){
 }
 
 /* ---------- auth views ---------- */
+function winnerCardHtml(){
+  const w = state.winner;
+  if(!w || !w.name) return '';
+  return `
+    <div class="winner-card">
+      <img src="images/stars.svg" class="winner-stars" alt="" aria-hidden="true">
+      <div class="winner-tag">${icon('star',16)}<span>فائزة تحدي الأسبوع</span></div>
+      <div class="winner-name">${mmEsc(w.name)}</div>
+      ${w.challenge ? `<div class="winner-challenge">${mmEsc(w.challenge)}</div>` : ''}
+      ${w.note ? `<div class="winner-note">${mmEsc(w.note)}</div>` : ''}
+    </div>`;
+}
 function viewLanding(){
   const comments = state.landingComments || [];
   return `
@@ -1251,12 +1219,7 @@ function viewLanding(){
       <button class="btn space-week-btn" data-action="nav-space-journey">ابدئي المهمة ←</button>
     </div>
 
-    <div class="space-quiz-card" style="margin-bottom:18px;">
-      <img src="images/stars.svg" class="space-quiz-stars" alt="" aria-hidden="true">
-      <div class="space-quiz-tag">${icon('rocket',17)}<span>مسابقة أسبوع الفضاء</span></div>
-      <div class="space-quiz-text">10 أسئلة عن الفضاء<br>هل تستطيعين الوصول إلى القمة؟</div>
-      <button class="btn space-quiz-btn" data-action="nav-space-quiz">ابدئي المسابقة</button>
-    </div>
+    ${winnerCardHtml() ? `<div style="margin-bottom:18px;">${winnerCardHtml()}</div>` : ''}
 
     <div class="landing-teaser-card">
       <h3 class="landing-h3" style="margin-bottom:8px;">من فكرة بسيطة… إلى رحلة معرفية</h3>
@@ -1372,110 +1335,6 @@ function fmtMMSS(ms){
   const m = Math.floor(total / 60), s = total % 60;
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
-function spaceQuizResultMsg(score){
-  if(score === 10) return '🌟 مستكشفة فضاء متميزة!';
-  if(score >= 8) return '🚀 أداء رائع!';
-  if(score >= 6) return '🪐 رحلة جميلة!';
-  return '🌌 استكشفي أكثر… الرحلة لم تنتهِ!';
-}
-function viewSpaceQuiz(){
-  // زائرة سبق شاركت من نفس الجهاز
-  let prior = null;
-  try{ prior = JSON.parse(localStorage.getItem('peerup-space-quiz-result') || 'null'); }catch(_e){ /* تجاهل */ }
-  if(prior && !state.spaceCompDone){
-    return `
-    <div class="content-app space-journey-bg">
-      <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
-      ${pageHead('🌌 مسابقة أسبوع الفضاء')}
-      <div class="journey-complete">
-        <img src="images/rocket.svg" class="journey-complete-rocket" alt="">
-        <h2>أنتِ ضمن قائمة المستكشفات 🚀</h2>
-        <p>سبق لك المشاركة في هذه المسابقة من هذا الجهاز.</p>
-        <div class="points-big">${prior.score} / 10</div>
-        <p style="margin-top:-6px;">الزمن: ${fmtMMSS(prior.completionTime)}</p>
-        <button class="btn btn-primary" style="margin-top:14px;" data-action="nav-space-quiz-leaderboard">🏆 عرض لوحة المتصدرين</button>
-        <button class="btn" style="margin-top:10px; background:rgba(255,255,255,.14); color:#fff;" data-action="back-to-landing-intro">العودة إلى PeerUp</button>
-      </div>
-    </div>`;
-  }
-
-  if(state.spaceCompDone){
-    const r = state.spaceCompResult || {score:0, completionTime:0};
-    return `
-    <div class="content-app space-journey-bg">
-      <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
-      ${pageHead('🌌 مسابقة أسبوع الفضاء')}
-      <div class="journey-complete">
-        <img src="images/rocket.svg" class="journey-complete-rocket" alt="">
-        <h2>🚀 انتهت رحلتك!</h2>
-        <p>أحسنتِ يا ${mmEsc(state.spaceCompName)}</p>
-        <div class="points-big">${r.score} / 10</div>
-        <p style="margin-top:-6px;">الزمن: ${fmtMMSS(r.completionTime)}</p>
-        <p style="font-weight:700; color:#fff; margin-top:4px;">${spaceQuizResultMsg(r.score)}</p>
-        <button class="btn btn-primary" style="margin-top:16px;" data-action="nav-space-quiz-leaderboard">🏆 شاهدي لوحة المتصدرين</button>
-        <button class="btn" style="margin-top:10px; background:rgba(255,255,255,.14); color:#fff;" data-action="back-to-landing-intro">العودة إلى PeerUp</button>
-      </div>
-    </div>`;
-  }
-
-  if(!state.spaceCompAttemptId){
-    return `
-    <div class="content-app space-journey-bg">
-      <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
-      ${pageHead('🌌 مسابقة أسبوع الفضاء', '10 أسئلة… 10 فرص لتثبتي معرفتك بالفضاء.')}
-      <div class="journey-station">
-        <h3 class="journey-station-title">اكتبي اسمك</h3>
-        <input type="text" id="spaceCompNameInput" class="journey-share-input" placeholder="اسم المشاركة" maxlength="30">
-        <button class="btn btn-primary" data-action="start-space-quiz" ${state.loading ? 'disabled' : ''}>${state.loading ? 'جارِ البدء...' : 'ابدئي الرحلة 🚀'}</button>
-      </div>
-    </div>`;
-  }
-
-  const q = state.spaceCompQuestions[state.spaceCompIndex];
-  const answered = state.spaceCompAnswered !== null;
-  const dots = state.spaceCompQuestions.map((_, i) => i < state.spaceCompIndex ? '●' : (i === state.spaceCompIndex ? '●' : '○')).join('');
-  return `
-  <div class="content-app space-journey-bg">
-    <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
-    ${pageHead('🌌 مسابقة أسبوع الفضاء')}
-    <div class="quiz-progress-head">
-      <div class="quiz-progress-label">السؤال ${state.spaceCompIndex + 1} من ${state.spaceCompQuestions.length}</div>
-      <div class="quiz-progress-dots">${dots}</div>
-    </div>
-    <div class="quiz-card">
-      <div class="quiz-q">${mmEsc(q.q)}</div>
-      ${q.options.map((opt, i) => `
-        <button class="quiz-opt ${answered && i===state.spaceCompAnswered ? 'selected-pending' : ''}" data-action="answer-space-comp-quiz" data-i="${i}" ${answered ? 'disabled' : ''}>${mmEsc(opt)}</button>`).join('')}
-    </div>
-  </div>`;
-}
-
-function viewSpaceQuizLeaderboard(){
-  const list = state.spaceCompLeaderboard || [];
-  let myResult = null;
-  try{ myResult = JSON.parse(localStorage.getItem('peerup-space-quiz-result') || 'null'); }catch(_e){ /* تجاهل */ }
-  const medal = (i) => i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : '';
-  return `
-  <div class="content-app space-journey-bg">
-    <img src="images/planet.svg" class="journey-bg-planet" alt="" aria-hidden="true">
-    ${pageHead('🏆 لوحة مستكشفات الفضاء')}
-    ${list.length ? `
-    <div class="leaderboard-list">
-      ${list.map((r, i) => {
-        const isMe = myResult && myResult.id === r.id;
-        return `
-        <div class="leaderboard-row ${isMe ? 'is-me' : ''}">
-          <div class="lb-rank">${medal(i) || '#'+(i+1)}</div>
-          <div class="lb-name">${isMe ? '✨ أنتِ — ' : ''}${mmEsc(r.name)}</div>
-          <div class="lb-score">${r.score}/10</div>
-          <div class="lb-time">${fmtMMSS(r.completionTime)}</div>
-        </div>`;
-      }).join('')}
-    </div>` : `<div class="empty-state"><span class="emoji">${icon('rocket',30)}</span>ولا مستكشفة شاركت لين الحين.</div>`}
-    <button class="btn" style="margin-top:18px; background:rgba(255,255,255,.14); color:#fff;" data-action="back-to-landing-intro">العودة إلى PeerUp</button>
-  </div>`;
-}
-
 function viewSpaceJourney(){
   return `
   <div class="content-app space-journey-bg">
@@ -1592,22 +1451,25 @@ function weeklyCardsHtml(){
   const w = state.weekly;
   if(!w) return '';
   const me = state.profile || {};
-  const star = w.star;
-  const top = w.topSection;
+  // يبدأ الأسبوع كل أحد. وفي بدايته قبل أي نشاط نعرض نجمة الأسبوع الماضي مع توضيح ذلك.
+  const starIsPrev = !w.star && !!w.prevStar;
+  const star = w.star || w.prevStar;
+  const topIsPrev = !w.topSection && !!w.prevTopSection;
+  const top = w.topSection || w.prevTopSection;
   return `
       <div class="weekly-row">
         <div class="weekly-card">
-          <div class="weekly-tag">${icon('star',15)}<span>نجمة الأسبوع</span></div>
+          <div class="weekly-tag">${icon('star',15)}<span>${starIsPrev ? 'نجمة الأسبوع الماضي' : 'نجمة الأسبوع'}</span></div>
           ${star ? `
           <div class="weekly-body">
             ${avatarHtml(star, 40)}
             <div class="weekly-name">${mmEsc(star.displayName)}${star.uid === me.uid ? ' (أنتِ)' : ''}</div>
           </div>
-          <div class="weekly-sub">${star.weekPoints} نقطة خلال آخر 7 أيام</div>` : `
-          <div class="weekly-empty">ما فيه نشاط خلال آخر 7 أيام. كوني النجمة الأولى!</div>`}
+          <div class="weekly-sub">${star.weekPoints} نقطة تفاعل${starIsPrev ? ' الأسبوع الماضي' : ' منذ الأحد'}</div>` : `
+          <div class="weekly-empty">أسبوع جديد بدأ يوم الأحد. كوني النجمة الأولى!</div>`}
         </div>
         <div class="weekly-card">
-          <div class="weekly-tag">${icon('users',15)}<span>الفصل الأكثر تفاعلًا</span></div>
+          <div class="weekly-tag">${icon('users',15)}<span>${topIsPrev ? 'الفصل الأكثر تفاعلًا الأسبوع الماضي' : 'الفصل الأكثر تفاعلًا'}</span></div>
           ${top ? `
           <div class="weekly-big">شعبة ${top.id}</div>
           <div class="weekly-sub">${Math.round(top.avg * 10) / 10} نقطة لكل طالبة</div>` : `
@@ -1678,12 +1540,7 @@ function viewStudentHome(){
         <button class="btn space-week-btn" data-action="nav-space-journey">ابدئي رحلة الاستكشاف ←</button>
       </div>
 
-      <div class="space-quiz-card">
-        <img src="images/stars.svg" class="space-quiz-stars" alt="" aria-hidden="true">
-        <div class="space-quiz-tag">${icon('rocket',17)}<span>مسابقة أسبوع الفضاء</span></div>
-        <div class="space-quiz-text">اختبري معلوماتك عن الفضاء،<br>واجعلي اسمك بين أسرع المستكشفات!</div>
-        <button class="btn space-quiz-btn" data-action="nav-space-quiz">ابدئي المسابقة ←</button>
-      </div>
+      ${winnerCardHtml()}
 
       ${lessons.length ? `
       <div class="section-title">${icon('book',18)}<span>دروس ${subj ? subj.name : ''}</span></div>
@@ -1791,14 +1648,16 @@ function postCard(p){
     ${p.imageUrl ? `<img src="${p.imageUrl}" class="post-image" alt="صورة الشرح" loading="lazy">` : ''}
     ${p.voiceNote && p.voiceNote.dataUrl ? `<audio controls src="${p.voiceNote.dataUrl}" class="post-audio"></audio>` : ''}
     ${mindMapBlock(p)}
-    ${!pending ? `
-    <div style="margin-top:11px; display:flex; gap:8px;">
+    ${(!pending || isMine) ? `
+    <div style="margin-top:11px; display:flex; gap:8px; flex-wrap:wrap;">
+      ${!pending ? `
       <button class="pill-btn ${p.likedByMe?'liked':''}" data-action="like-post" data-id="${p.id}" ${p.likedByMe||isMine?'disabled':''}>
         💡 أفادني <span>${p.likesCount||0}</span>
       </button>
       <button class="pill-btn ${p.bookmarked?'saved':''}" data-action="toggle-bookmark" data-id="${p.id}">
         ${icon('bookmark',14)} ${p.bookmarked ? 'محفوظ' : 'احتفظي فيها'}
-      </button>
+      </button>` : ''}
+      ${isMine ? `<button class="pill-btn danger" data-action="delete-my-post" data-id="${p.id}">${icon('trash',14)} حذف مشاركتي</button>` : ''}
     </div>` : ''}
   </div>`;
 }
@@ -1950,6 +1809,8 @@ async function handleSubmitChallenge(){
   }
   setState({loading:true});
   try{
+    // نجيب التحدي الحالي لحظة الإرسال (مو النسخة اللي انحمّلت عند الدخول) عشان لو نشرت المعلمة تحدي جديد ما يضيع ارتباط الإجابة
+    const freshChallenge = await fetchChallenge(db).catch(() => null);
     const voiceUploaded = await uploadVoiceNote(voice);
     let imageUrl = null;
     if(challengeMode === 'photo' && photoBlob){
@@ -1968,7 +1829,7 @@ async function handleSubmitChallenge(){
       mindMap,
       voiceNote: voiceUploaded,
       imageUrl,
-      challengeKey: challengeKeyOf(state.challenge),
+      challengeKey: challengeKeyOf(freshChallenge || state.challenge),
     });
     mapDoc = null; voiceNote = null; challengeMode = null;
     if(photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
@@ -2186,9 +2047,9 @@ function viewTeacherHome(){
       <div><div class="r-title">تعليقات الزوار</div><div class="r-sub">راجعي آراء الزوار وأخفي غير المناسب</div></div>
       <span class="chev">←</span>
     </button>
-    <button class="role-card" data-action="nav-space-quiz-admin" style="margin-top:4px;">
-      <div class="badge" style="background:var(--primary-soft); color:var(--primary);">${icon('rocket',20)}</div>
-      <div><div class="r-title">نتائج مسابقة الفضاء</div><div class="r-sub">راجعي النتائج واحذفي أي مشاركة غير مناسبة</div></div>
+    <button class="role-card" data-action="nav-winner-admin" style="margin-top:4px;">
+      <div class="badge" style="background:var(--primary-soft); color:var(--primary);">${icon('star',20)}</div>
+      <div><div class="r-title">إعلان الفائزة بالتحدي</div><div class="r-sub">${state.winner ? 'منشور الآن — اضغطي للتعديل أو الإخفاء' : 'انشري اسم الفائزة في الصفحة الرئيسية'}</div></div>
       <span class="chev">←</span>
     </button>
     <div class="section-title">${icon('flame',18)}<span>تحدي الأسبوع</span></div>
@@ -2256,23 +2117,28 @@ function pendingPostCard(p){
   </div>`;
 }
 
-function viewSpaceQuizAdmin(){
-  const results = state.spaceCompLeaderboard || [];
+function viewWinnerAdmin(){
+  const d = state.winnerDraft || {name: '', note: '', challenge: '', active: false};
+  const cands = state.winnerCandidates || [];
   return `
   <div class="content-app">
     <div class="page-head" style="padding-top:2px;">
-      <div><h2>${icon('rocket',20)} نتائج مسابقة الفضاء</h2><div class="p-sub">${results.length} مشاركة</div></div>
+      <div><h2>${icon('star',20)} إعلان الفائزة بالتحدي</h2><div class="p-sub">${d.active ? 'الإعلان منشور الآن' : 'الإعلان غير منشور'}</div></div>
     </div>
-    ${results.length ? `
-    <button class="btn" style="width:auto; padding:9px 16px; margin-bottom:14px; background:var(--danger-soft); color:var(--danger); font-size:12.5px;" data-action="reset-space-quiz-results">إعادة ضبط كل النتائج</button>
-    ${results.map(r => `
-      <div class="post-card">
-        <div class="p-head">
-          <div style="flex:1;"><div class="p-who">${mmEsc(r.name)}</div><div class="p-meta">${r.score}/10 · ${fmtMMSS(r.completionTime)}</div></div>
-          <button class="btn" style="width:auto; padding:0 12px; background:var(--danger-soft); color:var(--danger);" data-action="delete-space-quiz-result" data-id="${r.id}">${icon('trash',16)}</button>
-        </div>
-      </div>`).join('')}` : `
-      <div class="empty-state"><span class="emoji">${icon('rocket',30)}</span>ولا مشاركة وصلت بعد.</div>`}
+    ${cands.length ? `
+    <div class="winner-cands-label">اختاري من الطالبات اللاتي أجبن على التحدي الحالي:</div>
+    <div class="winner-cands">
+      ${cands.map(c => `<button type="button" class="pill-btn" data-action="winner-pick" data-name="${mmEsc(c.name)}">${mmEsc(c.name || 'طالبة')}</button>`).join('')}
+    </div>` : ''}
+    <label class="challenge-lesson-label" for="winnerName">الاسم كما سيظهر للجميع</label>
+    <input type="text" id="winnerName" maxlength="60" value="${mmEsc(d.name)}" placeholder="مثال: سارة (الاسم الأول فقط)">
+    <label class="challenge-lesson-label" for="winnerChallenge" style="margin-top:12px;">التحدي (اختياري)</label>
+    <input type="text" id="winnerChallenge" maxlength="200" value="${mmEsc(d.challenge)}" placeholder="نص التحدي">
+    <label class="challenge-lesson-label" for="winnerNote" style="margin-top:12px;">كلمة تهنئة (اختياري)</label>
+    <textarea id="winnerNote" maxlength="200" placeholder="مثال: شرح واضح وأمثلة من الحياة، بارك الله فيكِ">${mmEsc(d.note)}</textarea>
+    <p class="p-sub" style="margin:8px 0 14px;">يظهر الإعلان في صفحة البداية العامة وفي الصفحة الرئيسية للطالبات، فاكتفي بالاسم الأول إن أردتِ الخصوصية.</p>
+    <button class="btn btn-primary" data-action="winner-publish" ${state.loading ? 'disabled' : ''}>${icon('save',17)} نشر الإعلان</button>
+    ${d.active ? `<button class="btn" style="margin-top:10px; background:var(--danger-soft); color:var(--danger);" data-action="winner-hide" ${state.loading ? 'disabled' : ''}>إخفاء الإعلان</button>` : ''}
   </div>`;
 }
 
@@ -2375,14 +2241,12 @@ function render(){
   if(state.view === 'savedPosts'){ app.innerHTML = viewSavedPosts() + studentNav(); return; }
   if(state.view === 'aboutStory'){ app.innerHTML = viewAboutStory() + (state.profile ? studentNav() : ''); return; }
   if(state.view === 'spaceJourney'){ app.innerHTML = viewSpaceJourney() + (state.profile ? studentNav() : ''); return; }
-  if(state.view === 'spaceQuiz'){ app.innerHTML = viewSpaceQuiz() + (state.profile ? studentNav() : ''); return; }
-  if(state.view === 'spaceQuizLeaderboard'){ app.innerHTML = viewSpaceQuizLeaderboard() + (state.profile ? studentNav() : ''); return; }
   if(state.view === 'studentsList'){ app.innerHTML = viewStudentsList() + studentNav(); return; }
   if(state.view === 'studentProfile'){ app.innerHTML = viewStudentProfile() + studentNav(); return; }
   if(state.view === 'teacherHome'){ app.innerHTML = viewTeacherHome() + teacherNav(); return; }
   if(state.view === 'teacherReview'){ app.innerHTML = viewTeacherReview() + teacherNav(); return; }
   if(state.view === 'teacherComments'){ app.innerHTML = viewTeacherComments() + teacherNav(); return; }
-  if(state.view === 'spaceQuizAdmin'){ app.innerHTML = viewSpaceQuizAdmin() + teacherNav(); return; }
+  if(state.view === 'winnerAdmin'){ app.innerHTML = viewWinnerAdmin() + teacherNav(); return; }
   if(state.view === 'teacherStats'){ app.innerHTML = viewTeacherStats() + teacherNav(); return; }
   app.innerHTML = viewLanding();
 }
@@ -2467,12 +2331,14 @@ document.addEventListener('click', (e) => {
     openTeacherComments();
   } else if(action === 'delete-landing-comment'){
     handleDeleteLandingComment(el.dataset.id);
-  } else if(action === 'nav-space-quiz-admin'){
-    openSpaceQuizAdmin();
-  } else if(action === 'delete-space-quiz-result'){
-    handleDeleteSpaceQuizResult(el.dataset.id);
-  } else if(action === 'reset-space-quiz-results'){
-    handleResetSpaceQuizResults();
+  } else if(action === 'nav-winner-admin'){
+    openWinnerAdmin();
+  } else if(action === 'winner-publish'){
+    handleSaveWinner(true);
+  } else if(action === 'winner-hide'){
+    handleSaveWinner(false);
+  } else if(action === 'winner-pick'){
+    const inp = document.getElementById('winnerName'); if(inp) inp.value = el.dataset.name || '';
   } else if(action === 'nav-teacher-stats'){
     openTeacherStats();
   } else if(action === 'approve-post'){
@@ -2543,14 +2409,6 @@ document.addEventListener('click', (e) => {
     setState({showLandingComments: true});
   } else if(action === 'nav-space-journey'){
     openSpaceJourney();
-  } else if(action === 'nav-space-quiz'){
-    openSpaceQuiz();
-  } else if(action === 'start-space-quiz'){
-    handleStartSpaceQuiz();
-  } else if(action === 'answer-space-comp-quiz'){
-    handleAnswerSpaceCompQuiz(Number(el.dataset.i));
-  } else if(action === 'nav-space-quiz-leaderboard'){
-    openSpaceQuizLeaderboard();
   } else if(action === 'answer-space-quiz'){
     handleSpaceQuizAnswer(Number(el.dataset.i));
   } else if(action === 'space-next-station'){
@@ -2569,6 +2427,8 @@ document.addEventListener('click', (e) => {
     handleToggleBookmark(el.dataset.id);
   } else if(action === 'submit-post'){
     handleSubmitPost();
+  } else if(action === 'delete-my-post'){
+    handleDeleteMyPost(el.dataset.id);
   } else if(action === 'nav-challenge-answers'){
     openChallengeAnswers();
   } else if(action === 'pick-challenge-mode'){
